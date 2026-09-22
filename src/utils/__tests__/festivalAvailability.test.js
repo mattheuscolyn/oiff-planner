@@ -139,43 +139,66 @@ describe('Festival Availability Derivation', () => {
   it('11. departure ferry availability = ferry departure - terminal buffer - island transfer', () => {
     const arrival = { date: '2026-10-13', type: 'already-on-island' }
     const departure = { 
-      date: '2026-10-19', 
+      date: '2026-10-18', // Use Sunday (festival day) instead of Monday
       type: 'ferry', 
       ferryId: 'ferry-2',
       isVehicle: false 
     }
     
-    const { availabilityByDate } = deriveFestivalAvailability(arrival, departure, mockFerries)
+    // Add ferry for Sunday
+    const ferriesWithSunday = [
+      ...mockFerries,
+      {
+        id: 'ferry-sun',
+        date: '2026-10-18',
+        route: 'orcas-anacortes',
+        departureTime: '16:30',
+        arrivalTime: '17:35'
+      }
+    ]
+    
+    const { availabilityByDate } = deriveFestivalAvailability(arrival, departure, ferriesWithSunday)
     
     // Ferry departs at 16:30, subtract 15 min walk-on + 25 min transfer = 15:50
-    expect(availabilityByDate['2026-10-19'].until).toBe('15:50')
+    expect(availabilityByDate['2026-10-18'].until).toBe('15:50')
   })
 
   // Test 12: Vehicle/walk-on departure buffers differ
   it('12. vehicle/walk-on departure buffers differ correctly', () => {
     const arrival = { date: '2026-10-13', type: 'already-on-island' }
     
+    const ferriesWithSunday = [
+      ...mockFerries,
+      {
+        id: 'ferry-sun',
+        date: '2026-10-18',
+        route: 'orcas-anacortes',
+        departureTime: '16:30',
+        arrivalTime: '17:35'
+      }
+    ]
+    
     // Walk-on
     const departureWalkOn = { 
-      date: '2026-10-19', 
+      date: '2026-10-18', 
       type: 'ferry', 
-      ferryId: 'ferry-2',
+      ferryId: 'ferry-sun',
       isVehicle: false 
     }
-    const walkOnResult = deriveFestivalAvailability(arrival, departureWalkOn, mockFerries)
+    const walkOnResult = deriveFestivalAvailability(arrival, departureWalkOn, ferriesWithSunday)
     
     // Vehicle
     const departureVehicle = { 
-      date: '2026-10-19', 
+      date: '2026-10-18', 
       type: 'ferry', 
-      ferryId: 'ferry-2',
+      ferryId: 'ferry-sun',
       isVehicle: true 
     }
-    const vehicleResult = deriveFestivalAvailability(arrival, departureVehicle, mockFerries)
+    const vehicleResult = deriveFestivalAvailability(arrival, departureVehicle, ferriesWithSunday)
     
     // Vehicle should have earlier cutoff (50 min vs 15 min terminal buffer)
-    expect(walkOnResult.availabilityByDate['2026-10-19'].until).toBe('15:50')
-    expect(vehicleResult.availabilityByDate['2026-10-19'].until).toBe('15:15')
+    expect(walkOnResult.availabilityByDate['2026-10-18'].until).toBe('15:50')
+    expect(vehicleResult.availabilityByDate['2026-10-18'].until).toBe('15:15')
   })
 
   // Test 15: Departure cannot precede arrival
@@ -217,7 +240,8 @@ describe('Availability Summary Formatting', () => {
     
     const summary = formatAvailabilitySummary(arrival, departure, [])
     
-    expect(summary).toContain('Thu')
+    // Oct 17 2026 is Saturday, Oct 18 is Sunday
+    expect(summary).toContain('Sat')
     expect(summary).toContain('14:00')
     expect(summary).toContain('Sun')
     expect(summary).toContain('18:00')
