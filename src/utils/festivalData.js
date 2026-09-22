@@ -34,7 +34,7 @@ export function getScreeningEndTime(screening) {
 
 export const DEFAULT_TRANSITION_BUFFER = 15
 
-export function screeningsOverlap(screening1, screening2) {
+export function screeningsOverlap(screening1, screening2, film1Param = null, film2Param = null) {
   if (screening1.date !== screening2.date) return false
   
   const [s1Hours, s1Minutes] = screening1.startTime.split(':').map(Number)
@@ -43,8 +43,9 @@ export function screeningsOverlap(screening1, screening2) {
   const s1Start = s1Hours * 60 + s1Minutes
   const s2Start = s2Hours * 60 + s2Minutes
   
-  const film1 = getFilmById(screening1.filmId)
-  const film2 = getFilmById(screening2.filmId)
+  // Use provided film objects or look them up
+  const film1 = film1Param || getFilmById(screening1.filmId)
+  const film2 = film2Param || getFilmById(screening2.filmId)
   
   if (!film1 || !film2) return false
   

@@ -1,0 +1,232 @@
+.attendance-step {
+  padding: 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.attendance-step h2 {
+  font-size: 1.75rem;
+  margin-bottom: 1.5rem;
+  color: #1a1a1a;
+}
+
+.attendance-step h3 {
+  font-size: 1.125rem;
+  margin-bottom: 0.75rem;
+  color: #333;
+}
+
+.attendance-step section {
+  margin-bottom: 2rem;
+}
+
+/* Festival Days */
+.day-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.day-toggle {
+  padding: 1rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.day-toggle:hover {
+  border-color: #c19a6b;
+}
+
+.day-toggle.selected {
+  border-color: #c19a6b;
+  background: #c19a6b;
+  color: white;
+}
+
+/* Travel Options */
+.travel-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.travel-option {
+  padding: 0.875rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.travel-option:hover {
+  border-color: #c19a6b;
+}
+
+.travel-option.selected {
+  border-color: #c19a6b;
+  background: #faf7f2;
+  font-weight: 500;
+}
+
+/* Vehicle Toggle */
+.vehicle-toggle {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.vehicle-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+}
+
+.vehicle-toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* Ferry Options */
+.ferry-sailings {
+  margin-top: 1rem;
+}
+
+.ferry-note {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.reserve-link {
+  color: #c19a6b;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.reserve-link:hover {
+  text-decoration: underline;
+}
+
+.ferry-option {
+  width: 100%;
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ferry-option:hover {
+  border-color: #c19a6b;
+}
+
+.ferry-option.selected {
+  border-color: #c19a6b;
+  background: #faf7f2;
+}
+
+.ferry-time {
+  font-size: 0.9375rem;
+  color: #333;
+}
+
+.ferry-time strong {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.derived-availability {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #e8dcc8;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #5a4a2f;
+  font-weight: 500;
+}
+
+/* Custom Time */
+.custom-time {
+  margin-top: 1rem;
+}
+
+.custom-time label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.custom-time input[type="time"] {
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.custom-time input[type="time"]:focus {
+  outline: none;
+  border-color: #c19a6b;
+}
+
+/* Continue Button */
+.continue-button {
+  width: 100%;
+  padding: 1rem;
+  background: #c19a6b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.continue-button:hover:not(:disabled) {
+  background: #a8885a;
+}
+
+.continue-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .attendance-step {
+    padding: 0.75rem;
+  }
+  
+  .attendance-step h2 {
+    font-size: 1.5rem;
+  }
+  
+  .day-toggle {
+    padding: 0.875rem;
+  }
+  
+  .ferry-option {
+    padding: 0.875rem;
+  }
+}

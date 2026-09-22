@@ -12,11 +12,9 @@ import {
   isScreeningAvailable,
   wouldViolateMaxFilms,
   conflictsWithExisting,
-  hasAdequateTransition,
-  hasMealBreak,
   validatePlan
 } from './constraints'
-import { scorePlan, getFilmWeight, countByInterest, calculateAvailableStats } from './scoring'
+import { scorePlan, countByInterest, calculateAvailableStats } from './scoring'
 
 /**
  * Generate an optimized festival plan
@@ -124,14 +122,25 @@ function filterCandidateScreenings(screenings, films, interests, constraints) {
     excludedFilms = [],
     includeSkip = false,
     includeSeen = false,
-    availabilityWindows = {}
+    availabilityWindows = {},
+    attendanceConstraints = null,
+    hardDecisions = {}
   } = constraints
+  
+  // Build list of excluded films from hard decisions
+  const decisionExcluded = []
+  Object.values(hardDecisions).forEach(decision => {
+    if (decision.excluded) {
+      decisionExcluded.push(...decision.excluded)
+    }
+  })
   
   return screenings.filter(screening => {
     const film = getFilmById(films, screening.filmId)
     if (!film) return false
     
     if (excludedFilms.includes(film.id)) return false
+    if (decisionExcluded.includes(film.id)) return false
     
     const interest = interests[film.id]
     if (!includeSkip && interest === INTEREST_LEVELS.SKIP) return false
@@ -139,8 +148,55 @@ function filterCandidateScreenings(screenings, films, interests, constraints) {
     
     if (!isScreeningAvailable(screening, availabilityWindows)) return false
     
+    // Check attendance-based constraints if provided
+    if (attendanceConstraints) {
+      if (!isScreeningFeasibleForAttendance(screening, film, attendanceConstraints)) {
+        return false
+      }
+    }
+    
     return true
   })
+}
+
+/**
+ * Check if a screening is feasible under attendance constraints
+ * @param {object} screening - Screening object
+ * @param {object} film - Film object  
+ * @param {object} attendanceConstraints - Attendance constraints
+ * @returns {boolean} True if screening is feasible
+ */
+function isScreeningFeasibleForAttendance(screening, film, attendanceConstraints) {
+  const { attendanceDays, availabilityByDate } = attendanceConstraints
+  
+  // Check if day is selected
+  if (attendanceDays && !attendanceDays[screening.date]) {
+    return false
+  }
+  
+  // Check time availability for this date
+  if (availabilityByDate && availabilityByDate[screening.date]) {
+    const { from, until } = availabilityByDate[screening.date]
+    if (from && until) {
+      // Parse times as minutes since midnight
+      const parseTime = (timeStr) => {
+        const [hours, minutes] = timeStr.split(':').map(Number)
+        return hours * 60 + minutes
+      }
+      
+      const screeningStart = parseTime(screening.time)
+      const screeningEnd = parseTime(getScreeningEndTime(screening, film))
+      const availableFrom = parseTime(from)
+      const availableUntil = parseTime(until)
+      
+      // Screening must start after available-from and end before available-until
+      if (screeningStart < availableFrom || screeningEnd > availableUntil) {
+        return false
+      }
+    }
+  }
+  
+  return true
 }
 
 /**

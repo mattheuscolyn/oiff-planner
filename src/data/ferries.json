@@ -1,0 +1,391 @@
+{
+  "route": "anacortes-orcas",
+  "source": "Washington State Ferries",
+  "season": "Fall 2026",
+  "validFrom": "2026-09-20",
+  "validThrough": "2026-12-26",
+  "sourceUrl": "https://wsdot.wa.gov/travel/washington-state-ferries/schedules",
+  "notes": [
+    "Vehicle reservations recommended for Anacortes/San Juan Islands route",
+    "Travelers with vehicles should arrive 45-60 minutes before departure",
+    "Walk-on passengers may board shortly before departure",
+    "Schedule subject to change - verify at terminal or wsdot.wa.gov",
+    "Times shown are for direct Anacortes ↔ Orcas sailings",
+    "Some sailings may stop at other islands (Lopez, Shaw, Friday Harbor)"
+  ],
+  "sailings": [
+    {
+      "id": "ana-orc-0530",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "05:30",
+      "arrivalTime": "06:25",
+      "durationMinutes": 55,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-0545",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "05:45",
+      "arrivalTime": "06:40",
+      "durationMinutes": 55,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-0725",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "07:25",
+      "arrivalTime": "08:20",
+      "durationMinutes": 55,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-0730",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "07:30",
+      "arrivalTime": "08:30",
+      "durationMinutes": 60,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1005",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "10:05",
+      "arrivalTime": "11:20",
+      "durationMinutes": 75,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1030",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "10:30",
+      "arrivalTime": "11:40",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1155",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "11:55",
+      "arrivalTime": "13:05",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1230",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "12:30",
+      "arrivalTime": "13:45",
+      "durationMinutes": 75,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1520",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "15:20",
+      "arrivalTime": "16:15",
+      "durationMinutes": 55,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1545",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "15:45",
+      "arrivalTime": "16:55",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1805",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "18:05",
+      "arrivalTime": "19:15",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-1950",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "19:50",
+      "arrivalTime": "21:00",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-2040",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "20:40",
+      "arrivalTime": "21:45",
+      "durationMinutes": 65,
+      "daysOfWeek": [
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "ana-orc-2125",
+      "route": "anacortes-orcas",
+      "departingTerminal": "Anacortes",
+      "arrivingTerminal": "Orcas Island",
+      "departureTime": "21:25",
+      "arrivalTime": "22:55",
+      "durationMinutes": 90,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-0650",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "06:50",
+      "arrivalTime": "08:20",
+      "durationMinutes": 90,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-0855",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "08:55",
+      "arrivalTime": "10:00",
+      "durationMinutes": 65,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-1150",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "11:50",
+      "arrivalTime": "13:00",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-1330",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "13:30",
+      "arrivalTime": "14:35",
+      "durationMinutes": 65,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-1635",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "16:35",
+      "arrivalTime": "17:45",
+      "durationMinutes": 70,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-1930",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "19:30",
+      "arrivalTime": "20:35",
+      "durationMinutes": 65,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    },
+    {
+      "id": "orc-ana-2155",
+      "route": "orcas-anacortes",
+      "departingTerminal": "Orcas Island",
+      "arrivingTerminal": "Anacortes",
+      "departureTime": "21:55",
+      "arrivalTime": "23:20",
+      "durationMinutes": 85,
+      "daysOfWeek": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        0
+      ],
+      "validFrom": "2026-09-20",
+      "validThrough": "2026-12-26"
+    }
+  ],
+  "importedAt": "2026-09-22T19:13:00.299Z",
+  "importMethod": "manual"
+}

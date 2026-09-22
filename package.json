@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "import:oiff": "node scripts/import-oiff-2026.mjs",
+    "import:ferries": "node scripts/import-ferries-2026.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
