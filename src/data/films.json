@@ -1,1 +1,286 @@
-[]
+{
+  "films": [
+    {
+      "id": "film-1",
+      "title": "The Lighthouse Keeper's Dream",
+      "year": 2026,
+      "runtime": 108,
+      "director": "Sofia Bergström",
+      "country": "Sweden, Norway",
+      "synopsis": "An aging lighthouse keeper on a remote Scandinavian island discovers a mysterious journal that reveals secrets about his predecessor. A meditative exploration of solitude, memory, and the sea.",
+      "poster": "/posters/lighthouse-keeper.jpg"
+    },
+    {
+      "id": "film-2",
+      "title": "Tidal Roots",
+      "year": 2025,
+      "runtime": 92,
+      "director": "Maya Chen",
+      "country": "USA, Taiwan",
+      "synopsis": "A marine biologist returns to her Pacific Northwest hometown to save the kelp forests she grew up exploring, confronting family tensions and corporate development.",
+      "poster": "/posters/tidal-roots.jpg"
+    },
+    {
+      "id": "film-3",
+      "title": "Bread & Salt",
+      "year": 2026,
+      "runtime": 135,
+      "director": "Andrei Volkov",
+      "country": "Poland, Ukraine",
+      "synopsis": "Three generations of a Polish family run a bakery through decades of political upheaval. An epic chronicle of survival, tradition, and the meaning of home.",
+      "poster": "/posters/bread-salt.jpg"
+    },
+    {
+      "id": "film-4",
+      "title": "The Last Ferry",
+      "year": 2025,
+      "runtime": 78,
+      "director": "James Whitaker",
+      "country": "Canada",
+      "synopsis": "A documentary following the final season of an aging ferry captain who has navigated the same route between islands for forty years. Intimate and elegiac.",
+      "poster": "/posters/last-ferry.jpg"
+    },
+    {
+      "id": "film-5",
+      "title": "Nocturne in Blue",
+      "year": 2026,
+      "runtime": 115,
+      "director": "Émilie Rousseau",
+      "country": "France, Belgium",
+      "synopsis": "A jazz pianist loses her hearing and must rebuild her relationship with music and her teenage daughter. Lyrical and emotionally resonant.",
+      "poster": "/posters/nocturne-blue.jpg"
+    },
+    {
+      "id": "film-6",
+      "title": "Summer of the Magpies",
+      "year": 2025,
+      "runtime": 88,
+      "director": "Luca Moretti",
+      "country": "Italy",
+      "synopsis": "Two childhood friends reunite in a small Italian village after twenty years apart. A bittersweet comedy about friendship, memory, and the roads not taken.",
+      "poster": "/posters/summer-magpies.jpg"
+    },
+    {
+      "id": "film-7",
+      "title": "Fog & Bone",
+      "year": 2026,
+      "runtime": 102,
+      "director": "Hannah Frost",
+      "country": "Iceland, Denmark",
+      "synopsis": "An archaeologist uncovers Viking ruins and becomes entangled with local folklore. A haunting thriller that blurs past and present.",
+      "poster": "/posters/fog-bone.jpg"
+    },
+    {
+      "id": "film-8",
+      "title": "The Orchard",
+      "year": 2025,
+      "runtime": 96,
+      "director": "Min-jun Park",
+      "country": "South Korea",
+      "synopsis": "A young woman inherits her grandmother's apple orchard and must decide whether to sell or restore it. A gentle, visually stunning meditation on heritage.",
+      "poster": "/posters/orchard.jpg"
+    },
+    {
+      "id": "film-9",
+      "title": "After the Flood",
+      "year": 2026,
+      "runtime": 122,
+      "director": "Carlos Mendoza",
+      "country": "Mexico, USA",
+      "synopsis": "When a small Mexican town is devastated by flooding, residents must rebuild while confronting climate change and displacement. Powerful and timely.",
+      "poster": "/posters/after-flood.jpg"
+    },
+    {
+      "id": "film-10",
+      "title": "Silent Waters",
+      "year": 2025,
+      "runtime": 84,
+      "director": "Anika Patel",
+      "country": "India",
+      "synopsis": "A short documentary following women who clean the sacred Ganges River, revealing stories of devotion, environmental activism, and resilience.",
+      "poster": "/posters/silent-waters.jpg"
+    },
+    {
+      "id": "film-11",
+      "title": "The North Wind",
+      "year": 2026,
+      "runtime": 118,
+      "director": "Bjorn Larsen",
+      "country": "Finland, Sweden",
+      "synopsis": "A Sami reindeer herder fights to preserve traditional land as industrial development encroaches. Visually breathtaking and politically urgent.",
+      "poster": "/posters/north-wind.jpg"
+    }
+  ],
+  "screenings": [
+    {
+      "id": "screening-1",
+      "filmId": "film-1",
+      "date": "2026-10-16",
+      "startTime": "19:00",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-2",
+      "filmId": "film-2",
+      "date": "2026-10-16",
+      "startTime": "19:30",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-3",
+      "filmId": "film-3",
+      "date": "2026-10-16",
+      "startTime": "21:00",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-4",
+      "filmId": "film-4",
+      "date": "2026-10-17",
+      "startTime": "14:00",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-5",
+      "filmId": "film-2",
+      "date": "2026-10-17",
+      "startTime": "14:30",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-6",
+      "filmId": "film-5",
+      "date": "2026-10-17",
+      "startTime": "16:30",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-7",
+      "filmId": "film-6",
+      "date": "2026-10-17",
+      "startTime": "19:00",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-8",
+      "filmId": "film-7",
+      "date": "2026-10-17",
+      "startTime": "19:30",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-9",
+      "filmId": "film-8",
+      "date": "2026-10-18",
+      "startTime": "12:00",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-10",
+      "filmId": "film-9",
+      "date": "2026-10-18",
+      "startTime": "14:30",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-11",
+      "filmId": "film-7",
+      "date": "2026-10-18",
+      "startTime": "14:45",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-12",
+      "filmId": "film-10",
+      "date": "2026-10-18",
+      "startTime": "17:00",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-13",
+      "filmId": "film-11",
+      "date": "2026-10-18",
+      "startTime": "17:15",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-14",
+      "filmId": "film-3",
+      "date": "2026-10-18",
+      "startTime": "19:30",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-15",
+      "filmId": "film-4",
+      "date": "2026-10-19",
+      "startTime": "13:00",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-16",
+      "filmId": "film-5",
+      "date": "2026-10-19",
+      "startTime": "15:30",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-17",
+      "filmId": "film-6",
+      "date": "2026-10-19",
+      "startTime": "16:00",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-18",
+      "filmId": "film-8",
+      "date": "2026-10-19",
+      "startTime": "18:30",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-19",
+      "filmId": "film-9",
+      "date": "2026-10-19",
+      "startTime": "18:45",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-20",
+      "filmId": "film-10",
+      "date": "2026-10-19",
+      "startTime": "21:00",
+      "venue": "Orcas Center Main Theater"
+    },
+    {
+      "id": "screening-21",
+      "filmId": "film-11",
+      "date": "2026-10-19",
+      "startTime": "21:15",
+      "venue": "Island Rec Center"
+    },
+    {
+      "id": "screening-22",
+      "filmId": "film-1",
+      "date": "2026-10-19",
+      "startTime": "21:30",
+      "venue": "Orcas Center Main Theater"
+    }
+  ],
+  "venues": [
+    {
+      "id": "orcas-center",
+      "name": "Orcas Center Main Theater"
+    },
+    {
+      "id": "island-rec",
+      "name": "Island Rec Center"
+    }
+  ],
+  "festivalDates": [
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+    "2026-10-19"
+  ]
+}
