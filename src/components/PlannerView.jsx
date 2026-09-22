@@ -11,10 +11,19 @@ function PlannerView() {
   const { interests } = useUserState()
   const { objective, setObjective, constraints, updateConstraints, generatedPlan, setGeneratedPlan, resetPlanner } = usePlanner()
   const [isGenerating, setIsGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [showAdvanced, setShowAdvanced] = useState(false)
   
   const handleGenerate = () => {
     setIsGenerating(true)
+    setProgress(0)
+    
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 90) return prev
+        return prev + Math.random() * 15
+      })
+    }, 100)
     
     setTimeout(() => {
       const plan = generatePlan({
@@ -25,9 +34,15 @@ function PlannerView() {
         objective
       })
       
-      setGeneratedPlan(plan)
-      setIsGenerating(false)
-    }, 100)
+      clearInterval(progressInterval)
+      setProgress(100)
+      
+      setTimeout(() => {
+        setGeneratedPlan(plan)
+        setIsGenerating(false)
+        setProgress(0)
+      }, 300)
+    }, 150)
   }
   
   const handleUsePlan = () => {
@@ -40,8 +55,15 @@ function PlannerView() {
   }
   
   const handleExcludeFilm = (filmId) => {
+    setIsGenerating(true)
+    setProgress(0)
+    
     const newExcluded = [...constraints.excludedFilms, filmId]
     updateConstraints({ excludedFilms: newExcluded })
+    
+    const progressInterval = setInterval(() => {
+      setProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 20))
+    }, 80)
     
     setTimeout(() => {
       const plan = generatePlan({
@@ -51,13 +73,28 @@ function PlannerView() {
         constraints: { ...constraints, excludedFilms: newExcluded },
         objective
       })
-      setGeneratedPlan(plan)
-    }, 100)
+      
+      clearInterval(progressInterval)
+      setProgress(100)
+      
+      setTimeout(() => {
+        setGeneratedPlan(plan)
+        setIsGenerating(false)
+        setProgress(0)
+      }, 200)
+    }, 120)
   }
   
   const handleLockScreening = (screeningId) => {
+    setIsGenerating(true)
+    setProgress(0)
+    
     const newLocked = [...constraints.lockedScreenings, screeningId]
     updateConstraints({ lockedScreenings: newLocked })
+    
+    const progressInterval = setInterval(() => {
+      setProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 20))
+    }, 80)
     
     setTimeout(() => {
       const plan = generatePlan({
@@ -67,8 +104,16 @@ function PlannerView() {
         constraints: { ...constraints, lockedScreenings: newLocked },
         objective
       })
-      setGeneratedPlan(plan)
-    }, 100)
+      
+      clearInterval(progressInterval)
+      setProgress(100)
+      
+      setTimeout(() => {
+        setGeneratedPlan(plan)
+        setIsGenerating(false)
+        setProgress(0)
+      }, 200)
+    }, 120)
   }
   
   return (
@@ -149,11 +194,41 @@ function PlannerView() {
           >
             {isGenerating ? 'Generating...' : 'Generate Plan'}
           </button>
+          
+          {isGenerating && (
+            <div className="progress-container">
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="progress-text">
+                Optimizing your festival schedule...
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {isGenerating && generatedPlan && (
+        <div className="recomputing-overlay">
+          <div className="progress-container">
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="progress-text">
+              Recomputing plan...
+            </div>
+          </div>
         </div>
       )}
       
       {generatedPlan && (
-        <div className="planner-results">
+        <div className={`planner-results ${isGenerating ? 'recomputing' : ''}`}>
           {generatedPlan.infeasible ? (
             <div className="infeasible-notice">
               <h3>⚠️ Unable to Generate Plan</h3>
