@@ -170,8 +170,8 @@ function PlannerViewInner() {
           interests,
           constraints: { ...constraints, lockedScreenings: newLocked },
           attendanceConstraints: {
-            attendanceDays: attendance.attendanceDays,
-            availabilityByDate: attendance.availabilityByDate
+            attendanceDays,
+            availabilityByDate
           },
           
           timeBudgetMs: 750
