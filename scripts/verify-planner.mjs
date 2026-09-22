@@ -15,9 +15,10 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Load real festival data
-const filmsData = JSON.parse(
+const rawData = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../src/data/films.json'), 'utf-8')
 )
+const filmsData = rawData.films || rawData
 
 // Extract screenings from film objects
 const screeningsData = []
