@@ -115,155 +115,155 @@
     {
       "id": "screening-1",
       "filmId": "film-1",
-      "date": "2026-10-16",
+      "date": "2026-10-14",
       "startTime": "19:00",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-2",
       "filmId": "film-2",
-      "date": "2026-10-16",
+      "date": "2026-10-14",
       "startTime": "19:30",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-3",
       "filmId": "film-3",
-      "date": "2026-10-16",
+      "date": "2026-10-14",
       "startTime": "21:00",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-4",
       "filmId": "film-4",
-      "date": "2026-10-17",
+      "date": "2026-10-15",
       "startTime": "14:00",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-5",
       "filmId": "film-2",
-      "date": "2026-10-17",
+      "date": "2026-10-15",
       "startTime": "14:30",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-6",
       "filmId": "film-5",
-      "date": "2026-10-17",
+      "date": "2026-10-15",
       "startTime": "16:30",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-7",
       "filmId": "film-6",
-      "date": "2026-10-17",
+      "date": "2026-10-15",
       "startTime": "19:00",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-8",
       "filmId": "film-7",
-      "date": "2026-10-17",
+      "date": "2026-10-15",
       "startTime": "19:30",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-9",
       "filmId": "film-8",
-      "date": "2026-10-18",
+      "date": "2026-10-16",
       "startTime": "12:00",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-10",
       "filmId": "film-9",
-      "date": "2026-10-18",
+      "date": "2026-10-16",
       "startTime": "14:30",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-11",
       "filmId": "film-7",
-      "date": "2026-10-18",
+      "date": "2026-10-16",
       "startTime": "14:45",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-12",
       "filmId": "film-10",
-      "date": "2026-10-18",
+      "date": "2026-10-16",
       "startTime": "17:00",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-13",
       "filmId": "film-11",
-      "date": "2026-10-18",
+      "date": "2026-10-16",
       "startTime": "17:15",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-14",
       "filmId": "film-3",
-      "date": "2026-10-18",
+      "date": "2026-10-16",
       "startTime": "19:30",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-15",
       "filmId": "film-4",
-      "date": "2026-10-19",
+      "date": "2026-10-17",
       "startTime": "13:00",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-16",
       "filmId": "film-5",
-      "date": "2026-10-19",
+      "date": "2026-10-17",
       "startTime": "15:30",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-17",
       "filmId": "film-6",
-      "date": "2026-10-19",
+      "date": "2026-10-17",
       "startTime": "16:00",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-18",
       "filmId": "film-8",
-      "date": "2026-10-19",
+      "date": "2026-10-17",
       "startTime": "18:30",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-19",
       "filmId": "film-9",
-      "date": "2026-10-19",
+      "date": "2026-10-17",
       "startTime": "18:45",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-20",
       "filmId": "film-10",
-      "date": "2026-10-19",
-      "startTime": "21:00",
+      "date": "2026-10-18",
+      "startTime": "14:00",
       "venue": "Orcas Center Main Theater"
     },
     {
       "id": "screening-21",
       "filmId": "film-11",
-      "date": "2026-10-19",
-      "startTime": "21:15",
+      "date": "2026-10-18",
+      "startTime": "16:30",
       "venue": "Island Rec Center"
     },
     {
       "id": "screening-22",
       "filmId": "film-1",
-      "date": "2026-10-19",
-      "startTime": "21:30",
+      "date": "2026-10-18",
+      "startTime": "19:00",
       "venue": "Orcas Center Main Theater"
     }
   ],
@@ -278,9 +278,10 @@
     }
   ],
   "festivalDates": [
+    "2026-10-14",
+    "2026-10-15",
     "2026-10-16",
     "2026-10-17",
-    "2026-10-18",
-    "2026-10-19"
+    "2026-10-18"
   ]
 }

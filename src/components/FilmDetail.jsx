@@ -1,26 +1,43 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { 
   getScreeningsForFilm, 
   formatTime, 
   formatDate,
   getScreeningEndTime 
 } from '../utils/festivalData'
-import { 
-  INTEREST_LEVELS, 
-  isScreeningSelected, 
-  toggleScreeningSelection 
-} from '../utils/userState'
+import { INTEREST_LEVELS } from '../utils/userState'
+import { useUserState } from '../contexts/UserStateContext'
 import './FilmDetail.css'
 
-function FilmDetail({ film, interest, onClose, onInterestChange, onUpdate }) {
+function FilmDetail({ film, onClose }) {
   const screenings = getScreeningsForFilm(film.id)
+  const { interests, selectedScreeningIds, updateFilmInterest, toggleScreening } = useUserState()
+  const interest = interests[film.id]
+  const closeButtonRef = useRef(null)
+  const previousFocusRef = useRef(null)
 
   useEffect(() => {
+    previousFocusRef.current = document.activeElement
     document.body.style.overflow = 'hidden'
+    
+    setTimeout(() => {
+      closeButtonRef.current?.focus()
+    }, 100)
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+
     return () => {
       document.body.style.overflow = ''
+      document.removeEventListener('keydown', handleEscape)
+      previousFocusRef.current?.focus()
     }
-  }, [])
+  }, [onClose])
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -29,8 +46,7 @@ function FilmDetail({ film, interest, onClose, onInterestChange, onUpdate }) {
   }
 
   const handleToggleScreening = (screeningId) => {
-    toggleScreeningSelection(screeningId)
-    onUpdate()
+    toggleScreening(screeningId)
   }
 
   const interestButtons = [
@@ -43,13 +59,23 @@ function FilmDetail({ film, interest, onClose, onInterestChange, onUpdate }) {
 
   return (
     <div className="film-detail-backdrop" onClick={handleBackdropClick}>
-      <div className="film-detail-modal">
-        <button className="detail-close" onClick={onClose} aria-label="Close">
+      <div 
+        className="film-detail-modal" 
+        role="dialog" 
+        aria-modal="true"
+        aria-labelledby="film-detail-title"
+      >
+        <button 
+          ref={closeButtonRef}
+          className="detail-close" 
+          onClick={onClose} 
+          aria-label="Close"
+        >
           ✕
         </button>
 
         <div className="detail-header">
-          <h2 className="detail-title">{film.title}</h2>
+          <h2 id="film-detail-title" className="detail-title">{film.title}</h2>
           <div className="detail-meta">
             {film.year} • {film.runtime} minutes
           </div>
@@ -71,7 +97,7 @@ function FilmDetail({ film, interest, onClose, onInterestChange, onUpdate }) {
               <button
                 key={btn.value}
                 className={`interest-detail-btn ${interest === btn.value ? 'active' : ''}`}
-                onClick={() => onInterestChange(film.id, interest === btn.value ? null : btn.value)}
+                onClick={() => updateFilmInterest(film.id, interest === btn.value ? null : btn.value)}
               >
                 {btn.label}
               </button>
@@ -82,7 +108,7 @@ function FilmDetail({ film, interest, onClose, onInterestChange, onUpdate }) {
         <div className="detail-screenings">
           <h3>Screenings</h3>
           {screenings.map(screening => {
-            const selected = isScreeningSelected(screening.id)
+            const selected = selectedScreeningIds.includes(screening.id)
             return (
               <div key={screening.id} className="detail-screening-item">
                 <div className="screening-time-info">

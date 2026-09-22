@@ -6,22 +6,17 @@ import {
   formatDate,
   formatTime,
   getScreeningEndTime,
-  getScreeningsForFilm,
-  findConflictingScreenings
+  findConflictingScreenings,
+  hasCompatibleAlternate
 } from '../utils/festivalData'
-import {
-  getSelectedScreenings,
-  getFilmInterests,
-  INTEREST_LEVELS
-} from '../utils/userState'
+import { INTEREST_LEVELS } from '../utils/userState'
+import { useUserState } from '../contexts/UserStateContext'
 import FilmDetail from './FilmDetail'
 import './MyPlanView.css'
 
-function MyPlanView({ onUpdate }) {
+function MyPlanView() {
   const [selectedFilm, setSelectedFilm] = useState(null)
-
-  const selectedScreeningIds = useMemo(() => getSelectedScreenings(), [])
-  const interests = useMemo(() => getFilmInterests(), [])
+  const { interests, selectedScreeningIds } = useUserState()
 
   const planByDay = useMemo(() => {
     const selectedScreenings = selectedScreeningIds
@@ -67,6 +62,10 @@ function MyPlanView({ onUpdate }) {
         .map(s => s.filmId)
     )
 
+    const selectedScreenings = selectedScreeningIds
+      .map(id => getScreeningById(id))
+      .filter(Boolean)
+
     const interestedFilms = Object.entries(interests)
       .filter(([, interest]) => 
         interest === INTEREST_LEVELS.MUST_SEE || 
@@ -76,23 +75,18 @@ function MyPlanView({ onUpdate }) {
         const film = getFilmById(filmId)
         if (!film || selectedFilmIds.has(filmId)) return null
 
-        const allScreenings = getScreeningsForFilm(filmId)
-        const selectedScreenings = selectedScreeningIds
-          .map(id => getScreeningById(id))
-          .filter(Boolean)
-
-        const conflictingScreenings = allScreenings.filter(screening =>
-          findConflictingScreenings(screening, selectedScreenings).length > 0
-        )
+        const hasAlternate = hasCompatibleAlternate(filmId, selectedScreenings)
 
         let reason = 'No screening selected yet'
-        if (conflictingScreenings.length === allScreenings.length) {
-          reason = 'All screenings conflict with your plan'
-        } else if (conflictingScreenings.length > 0 && allScreenings.length > 1) {
-          reason = 'Some screenings conflict, but alternates available'
+        if (selectedScreenings.length > 0) {
+          if (hasAlternate) {
+            reason = 'Alternate screening available'
+          } else {
+            reason = 'All screenings conflict with your plan'
+          }
         }
 
-        return { film, interest, reason, allScreenings }
+        return { film, interest, reason }
       })
       .filter(Boolean)
       .sort((a, b) => {
@@ -172,7 +166,7 @@ function MyPlanView({ onUpdate }) {
           </p>
 
           <div className="not-scheduled-list">
-            {notScheduled.map(({ film, interest, reason, allScreenings }) => (
+            {notScheduled.map(({ film, interest, reason }) => (
               <article 
                 key={film.id} 
                 className="not-scheduled-item"
@@ -185,9 +179,6 @@ function MyPlanView({ onUpdate }) {
                   </span>
                 </div>
                 <div className="not-scheduled-reason">{reason}</div>
-                <div className="not-scheduled-screenings">
-                  {allScreenings.length} screening{allScreenings.length > 1 ? 's' : ''} available
-                </div>
               </article>
             ))}
           </div>
@@ -197,10 +188,7 @@ function MyPlanView({ onUpdate }) {
       {selectedFilm && (
         <FilmDetail
           film={selectedFilm}
-          interest={getFilmInterest(selectedFilm.id)}
           onClose={() => setSelectedFilm(null)}
-          onInterestChange={() => onUpdate()}
-          onUpdate={onUpdate}
         />
       )}
     </div>

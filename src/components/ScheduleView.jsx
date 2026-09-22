@@ -7,45 +7,62 @@ import {
   formatTime,
   getScreeningEndTime,
   screeningsOverlap,
-  getScreeningsForFilm
+  getScreeningById,
+  hasCompatibleAlternate
 } from '../utils/festivalData'
-import { 
-  getFilmInterest, 
-  getSelectedScreenings,
-  INTEREST_LEVELS 
-} from '../utils/userState'
+import { INTEREST_LEVELS } from '../utils/userState'
+import { useUserState } from '../contexts/UserStateContext'
 import FilmDetail from './FilmDetail'
 import './ScheduleView.css'
 
-function ScheduleView({ onUpdate }) {
+function ScheduleView() {
   const [filter, setFilter] = useState('all')
   const [selectedFilm, setSelectedFilm] = useState(null)
-
-  const selectedScreeningIds = useMemo(() => {
-    return getSelectedScreenings()
-  }, [])
+  const { interests, selectedScreeningIds } = useUserState()
 
   const scheduleByDay = useMemo(() => {
+    const activeInterests = [
+      INTEREST_LEVELS.MUST_SEE,
+      INTEREST_LEVELS.WANT_TO_SEE,
+      INTEREST_LEVELS.MAYBE
+    ]
+
     return festivalDates.map(date => {
       let screenings = getScreeningsByDate(date)
 
       screenings = screenings.map(screening => {
         const film = getFilmById(screening.filmId)
-        const interest = getFilmInterest(film.id)
+        const interest = interests[film.id]
         const isSelected = selectedScreeningIds.includes(screening.id)
         
-        const conflicts = screenings.filter(other => 
+        const overlappingScreenings = screenings.filter(other => 
           other.id !== screening.id && screeningsOverlap(screening, other)
         )
 
-        const hasAlternate = getScreeningsForFilm(screening.filmId).length > 1
+        const meaningfulConflicts = overlappingScreenings.filter(other => {
+          const otherFilm = getFilmById(other.filmId)
+          const otherInterest = interests[otherFilm.id]
+          const otherIsSelected = selectedScreeningIds.includes(other.id)
+          
+          return activeInterests.includes(otherInterest) || otherIsSelected
+        })
+
+        const selectedConflicts = selectedScreeningIds
+          .map(id => getScreeningById(id))
+          .filter(other => other && other.id !== screening.id && screeningsOverlap(screening, other))
+
+        const conflictingScreenings = isSelected ? selectedConflicts : meaningfulConflicts
+
+        const hasAlternate = conflictingScreenings.length > 0 
+          ? hasCompatibleAlternate(screening.filmId, conflictingScreenings)
+          : false
 
         return {
           ...screening,
           film,
           interest,
           isSelected,
-          conflicts,
+          conflicts: conflictingScreenings,
           hasAlternate
         }
       })
@@ -69,7 +86,7 @@ function ScheduleView({ onUpdate }) {
 
       return { date, screenings }
     })
-  }, [filter, selectedScreeningIds])
+  }, [filter, selectedScreeningIds, interests])
 
   const getInterestBadge = (interest) => {
     if (interest === INTEREST_LEVELS.MUST_SEE) return { text: 'Must See', class: 'must-see' }
@@ -157,10 +174,7 @@ function ScheduleView({ onUpdate }) {
       {selectedFilm && (
         <FilmDetail
           film={selectedFilm}
-          interest={getFilmInterest(selectedFilm.id)}
           onClose={() => setSelectedFilm(null)}
-          onInterestChange={() => onUpdate()}
-          onUpdate={onUpdate}
         />
       )}
     </div>

@@ -1,27 +1,16 @@
 import { useState, useMemo } from 'react'
 import { films } from '../utils/festivalData'
-import { getFilmInterest, setFilmInterest, INTEREST_LEVELS } from '../utils/userState'
+import { INTEREST_LEVELS } from '../utils/userState'
+import { useUserState } from '../contexts/UserStateContext'
 import FilmCard from './FilmCard'
 import FilmDetail from './FilmDetail'
 import './FilmsView.css'
 
-function FilmsView({ onUpdate }) {
+function FilmsView() {
   const [filter, setFilter] = useState('all')
   const [sort, setSort] = useState('schedule')
   const [selectedFilm, setSelectedFilm] = useState(null)
-  const [interests, setInterests] = useState(() => {
-    const initial = {}
-    films.forEach(film => {
-      initial[film.id] = getFilmInterest(film.id)
-    })
-    return initial
-  })
-
-  const handleInterestChange = (filmId, interest) => {
-    setFilmInterest(filmId, interest)
-    setInterests(prev => ({ ...prev, [filmId]: interest }))
-    onUpdate()
-  }
+  const { interests, updateFilmInterest } = useUserState()
 
   const filteredFilms = useMemo(() => {
     let result = [...films]
@@ -97,7 +86,7 @@ function FilmsView({ onUpdate }) {
             key={film.id}
             film={film}
             interest={interests[film.id]}
-            onInterestChange={handleInterestChange}
+            onInterestChange={updateFilmInterest}
             onFilmClick={() => setSelectedFilm(film)}
           />
         ))}
@@ -112,10 +101,7 @@ function FilmsView({ onUpdate }) {
       {selectedFilm && (
         <FilmDetail
           film={selectedFilm}
-          interest={interests[selectedFilm.id]}
           onClose={() => setSelectedFilm(null)}
-          onInterestChange={handleInterestChange}
-          onUpdate={onUpdate}
         />
       )}
     </div>
