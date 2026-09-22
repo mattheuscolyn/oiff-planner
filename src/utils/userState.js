@@ -1,5 +1,7 @@
 const INTEREST_KEY = 'oiff-planner-interests'
 const PLAN_KEY = 'oiff-planner-plan'
+const VERSION_KEY = 'oiff-planner-version'
+const CURRENT_VERSION = '2'
 
 export const INTEREST_LEVELS = {
   MUST_SEE: 'must-see',
@@ -7,6 +9,22 @@ export const INTEREST_LEVELS = {
   MAYBE: 'maybe',
   SKIP: 'skip',
   SEEN: 'seen'
+}
+
+function checkAndMigrateVersion() {
+  if (!safeLocalStorage()) return
+  
+  try {
+    const storedVersion = localStorage.getItem(VERSION_KEY)
+    
+    if (storedVersion !== CURRENT_VERSION) {
+      localStorage.removeItem(INTEREST_KEY)
+      localStorage.removeItem(PLAN_KEY)
+      localStorage.setItem(VERSION_KEY, CURRENT_VERSION)
+    }
+  } catch (error) {
+    console.error('Version check failed:', error)
+  }
 }
 
 function safeLocalStorage() {
@@ -21,6 +39,7 @@ function safeLocalStorage() {
 }
 
 export function getFilmInterests() {
+  checkAndMigrateVersion()
   if (!safeLocalStorage()) return {}
   
   try {
@@ -55,6 +74,7 @@ export function getFilmInterest(filmId) {
 }
 
 export function getSelectedScreenings() {
+  checkAndMigrateVersion()
   if (!safeLocalStorage()) return []
   
   try {

@@ -26,12 +26,16 @@ function FilmCard({ film, interest, onInterestChange, onFilmClick }) {
       <div className="film-card-header">
         <h3 className="film-title">{film.title}</h3>
         <div className="film-meta">
-          {film.year} • {film.runtime} min • {film.director}
+          {[
+            film.year,
+            film.runtime ? `${film.runtime} min` : null,
+            film.director
+          ].filter(Boolean).join(' • ')}
         </div>
-        <div className="film-country">{film.country}</div>
+        {film.country && <div className="film-country">{film.country}</div>}
       </div>
 
-      <p className="film-synopsis">{film.synopsis}</p>
+      {film.synopsis && <p className="film-synopsis">{film.synopsis}</p>}
 
       <div className="film-screenings">
         <strong>Screenings:</strong>

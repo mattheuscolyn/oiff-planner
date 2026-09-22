@@ -15,8 +15,12 @@ export function getScreeningsForFilm(filmId) {
 }
 
 export function getScreeningEndTime(screening) {
+  if (screening.endTime) {
+    return screening.endTime
+  }
+  
   const film = getFilmById(screening.filmId)
-  if (!film) return null
+  if (!film || !film.runtime) return null
   
   const [hours, minutes] = screening.startTime.split(':').map(Number)
   const startMinutes = hours * 60 + minutes
