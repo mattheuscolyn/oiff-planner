@@ -4,6 +4,8 @@ import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
 import { generatePlanV3 } from '../planner/optimizerV3'
 import { setSelectedScreenings } from '../utils/userState'
+import { deriveFestivalAvailability } from '../utils/festivalAvailability'
+import { getFerries } from '../utils/ferryData'
 import AttendanceStep from './AttendanceStep'
 import ErrorBoundary from './ErrorBoundary'
 import './PlannerView.css'
@@ -12,7 +14,8 @@ function PlannerViewInner() {
   const { interests } = useUserState()
   const { 
     constraints, 
-    attendance,
+    arrival,
+    departure,
     generatedPlan, 
     setGeneratedPlan,
     updateConstraints
@@ -45,14 +48,18 @@ function PlannerViewInner() {
     // Use setTimeout to allow UI to update
     setTimeout(() => {
       try {
+        // Derive attendance from arrival/departure
+        const ferries = getFerries()
+        const { attendanceDays, availabilityByDate } = deriveFestivalAvailability(arrival, departure, ferries)
+        
         const plan = generatePlanV3({
           films,
           screenings,
           interests,
           constraints,
           attendanceConstraints: {
-            attendanceDays: attendance.attendanceDays,
-            availabilityByDate: attendance.availabilityByDate
+            attendanceDays,
+            availabilityByDate
           },
           timeBudgetMs: 750 // 750ms budget for mobile
         })

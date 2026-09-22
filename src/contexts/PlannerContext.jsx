@@ -5,25 +5,7 @@ import { getFestivalDates, getDefaultAvailability } from '../utils/ferryData'
 const PlannerContext = createContext(null)
 
 const STORAGE_KEY = 'oiff-planner-state'
-const STATE_VERSION = '4' // Simplified arrival/departure model, removed hardDecisions
-
-// Initialize default attendance days (all selected)
-function getDefaultAttendanceDays() {
-  const days = {}
-  getFestivalDates().forEach(({ date }) => {
-    days[date] = true
-  })
-  return days
-}
-
-// Initialize default availability (all-day for each date)
-function getDefaultAvailabilityByDate() {
-  const availability = {}
-  getFestivalDates().forEach(({ date }) => {
-    availability[date] = getDefaultAvailability()
-  })
-  return availability
-}
+const STATE_VERSION = '5' // PR #10: Arrival/departure model replaces per-day attendance grid
 
 const DEFAULT_STATE = {
   version: STATE_VERSION,
@@ -38,26 +20,24 @@ const DEFAULT_STATE = {
     includeSkip: false,
     includeSeen: false
   },
-  // Keep existing attendance structure for this PR
-  // Will migrate to arrival/departure in PR #10
-  attendance: {
-    attendanceDays: getDefaultAttendanceDays(),
-    availabilityByDate: getDefaultAvailabilityByDate(),
-    arrivalTravel: {
-      type: 'already-on-island',
-      ferryId: null,
-      isVehicle: false,
-      customTime: null
-    },
-    departureTravel: {
-      type: 'staying-on-island',
-      ferryId: null,
-      isVehicle: false,
-      customTime: null
-    }
+  // PR #10: Simplified arrival/departure model
+  // Default: Full festival with no travel restrictions
+  arrival: {
+    date: '2026-10-13', // Tuesday (day before festival)
+    type: 'already-on-island', // 'already-on-island' | 'ferry' | 'custom'
+    ferryId: null,
+    isVehicle: false,
+    customTime: null
   },
-  // Removed: hardDecisions (completely eliminated)
-  // Removed: currentStep (no more wizard)
+  departure: {
+    date: '2026-10-19', // Monday (day after festival)
+    type: 'staying-longer', // 'staying-longer' | 'ferry' | 'custom'
+    ferryId: null,
+    isVehicle: false,
+    customTime: null
+  },
+  // Removed: old attendance.attendanceDays per-day grid
+  // Removed: old attendance.availabilityByDate manual per-day windows
   generatedPlan: null
 }
 
@@ -72,24 +52,30 @@ export function PlannerProvider({ children }) {
         if (parsed.version !== STATE_VERSION) {
           console.log(`Migrating planner state from v${parsed.version || 'unknown'} to v${STATE_VERSION}`)
           
-          // Migrate safe fields, discard incompatible ones
+          // Migrate from old per-day attendance to arrival/departure
           const migrated = {
             ...DEFAULT_STATE,
             version: STATE_VERSION,
-            // Preserve attendance preferences if valid
-            attendance: parsed.attendance?.attendanceDays 
+            // Attempt to derive arrival/departure from old attendance if present
+            arrival: parsed.attendance?.arrivalTravel 
               ? {
-                  ...DEFAULT_STATE.attendance,
-                  attendanceDays: parsed.attendance.attendanceDays,
-                  availabilityByDate: parsed.attendance.availabilityByDate || DEFAULT_STATE.attendance.availabilityByDate,
-                  arrivalTravel: parsed.attendance.arrivalTravel || DEFAULT_STATE.attendance.arrivalTravel,
-                  departureTravel: parsed.attendance.departureTravel || DEFAULT_STATE.attendance.departureTravel
+                  date: DEFAULT_STATE.arrival.date,
+                  type: parsed.attendance.arrivalTravel.type || DEFAULT_STATE.arrival.type,
+                  ferryId: parsed.attendance.arrivalTravel.ferryId || null,
+                  isVehicle: parsed.attendance.arrivalTravel.isVehicle || false,
+                  customTime: parsed.attendance.arrivalTravel.customTime || null
                 }
-              : DEFAULT_STATE.attendance,
-            // CRITICAL: Completely discard old hardDecisions
-            // This prevents stale binary decisions from constraining new plans
-            // Discard old currentStep (no more wizard)
-            // Discard stale generated plans
+              : DEFAULT_STATE.arrival,
+            departure: parsed.attendance?.departureTravel
+              ? {
+                  date: DEFAULT_STATE.departure.date,
+                  type: parsed.attendance.departureTravel.type || DEFAULT_STATE.departure.type,
+                  ferryId: parsed.attendance.departureTravel.ferryId || null,
+                  isVehicle: parsed.attendance.departureTravel.isVehicle || false,
+                  customTime: parsed.attendance.departureTravel.customTime || null
+                }
+              : DEFAULT_STATE.departure,
+            // Always clear generated plan on migration
             generatedPlan: null,
             constraints: {
               ...DEFAULT_STATE.constraints,
@@ -99,7 +85,7 @@ export function PlannerProvider({ children }) {
             }
           }
           
-          console.log('Migration complete: removed hardDecisions and currentStep')
+          console.log('Migration v4→v5: replaced per-day attendance grid with arrival/departure')
           
           return migrated
         }
@@ -144,10 +130,17 @@ export function PlannerProvider({ children }) {
     }))
   }, [])
 
-  const updateAttendance = useCallback((updates) => {
+  const updateArrival = useCallback((updates) => {
     setState(prev => ({
       ...prev,
-      attendance: { ...prev.attendance, ...updates }
+      arrival: { ...prev.arrival, ...updates }
+    }))
+  }, [])
+
+  const updateDeparture = useCallback((updates) => {
+    setState(prev => ({
+      ...prev,
+      departure: { ...prev.departure, ...updates }
     }))
   }, [])
 
@@ -181,7 +174,8 @@ export function PlannerProvider({ children }) {
     ...state,
     setObjective,
     updateConstraints,
-    updateAttendance,
+    updateArrival,
+    updateDeparture,
     setGeneratedPlan,
     resetPlanner,
     resetPlannerSession

@@ -1,381 +1,274 @@
+/**
+ * AttendanceStep - PR #10: Arrival/Departure UI
+ * 
+ * Replaces the festival-day grid with simple arrival/departure selection.
+ * Automatically derives festival availability.
+ */
+
 import { usePlanner } from '../contexts/PlannerContext'
-import { 
-  getFestivalDates, 
-  getSailingsForDate, 
-  formatTimeDisplay,
-  calculateArrivalAvailability,
-  calculateDepartureAvailability,
-  formatAvailabilitySummary,
-  VEHICLE_TERMINAL_BUFFER,
-  ISLAND_TRANSFER_BUFFER
-} from '../utils/ferryData'
+import { getFerries } from '../utils/ferryData'
+import { formatAvailabilitySummary } from '../utils/festivalAvailability'
 import './AttendanceStep.css'
 
-function AttendanceStep({ onContinue }) {
-  const { attendance, updateAttendance } = usePlanner()
-  const { attendanceDays, availabilityByDate, arrivalTravel, departureTravel } = attendance
+// Available arrival dates (includes Tuesday before festival)
+const ARRIVAL_DATES = [
+  { value: '2026-10-13', label: 'Tuesday Oct 13' },
+  { value: '2026-10-14', label: 'Wednesday Oct 14' },
+  { value: '2026-10-15', label: 'Thursday Oct 15' },
+  { value: '2026-10-16', label: 'Friday Oct 16' },
+  { value: '2026-10-17', label: 'Saturday Oct 17' },
+  { value: '2026-10-18', label: 'Sunday Oct 18' }
+]
+
+// Available departure dates (includes Monday after festival)
+const DEPARTURE_DATES = [
+  { value: '2026-10-14', label: 'Wednesday Oct 14' },
+  { value: '2026-10-15', label: 'Thursday Oct 15' },
+  { value: '2026-10-16', label: 'Friday Oct 16' },
+  { value: '2026-10-17', label: 'Saturday Oct 17' },
+  { value: '2026-10-18', label: 'Sunday Oct 18' },
+  { value: '2026-10-19', label: 'Monday Oct 19' }
+]
+
+export default function AttendanceStep({ onContinue }) {
+  const { arrival, departure, updateArrival, updateDeparture } = usePlanner()
   
-  const festivalDates = getFestivalDates()
-  const selectedDates = festivalDates.filter(d => attendanceDays[d.date])
-  const firstSelectedDate = selectedDates[0]
-  const lastSelectedDate = selectedDates[selectedDates.length - 1]
+  const ferries = getFerries()
   
-  const handleDayToggle = (date) => {
-    updateAttendance({
-      attendanceDays: {
-        ...attendanceDays,
-        [date]: !attendanceDays[date]
-      }
-    })
-  }
+  // Get applicable ferries for selected dates
+  const arrivalFerries = ferries.filter(f => 
+    f.date === arrival.date && f.route === 'anacortes-orcas'
+  )
   
-  const handleArrivalTypeChange = (type) => {
-    updateAttendance({
-      arrivalTravel: {
-        ...arrivalTravel,
-        type,
-        ferryId: null,
-        customTime: null
-      }
-    })
-  }
+  const departureFerries = ferries.filter(f => 
+    f.date === departure.date && f.route === 'orcas-anacortes'
+  )
   
-  const handleDepartureTypeChange = (type) => {
-    updateAttendance({
-      departureTravel: {
-        ...departureTravel,
-        type,
-        ferryId: null,
-        customTime: null
-      }
-    })
-  }
-  
-  const handleArrivalFerrySelect = (ferryId, sailing) => {
-    const availableFrom = calculateArrivalAvailability(sailing, arrivalTravel.isVehicle)
-    
-    updateAttendance({
-      arrivalTravel: {
-        ...arrivalTravel,
-        ferryId
-      },
-      availabilityByDate: {
-        ...availabilityByDate,
-        [firstSelectedDate.date]: {
-          ...availabilityByDate[firstSelectedDate.date],
-          from: availableFrom
-        }
-      }
-    })
-  }
-  
-  const handleDepartureFerrySelect = (ferryId, sailing) => {
-    const availableUntil = calculateDepartureAvailability(sailing, departureTravel.isVehicle)
-    
-    updateAttendance({
-      departureTravel: {
-        ...departureTravel,
-        ferryId
-      },
-      availabilityByDate: {
-        ...availabilityByDate,
-        [lastSelectedDate.date]: {
-          ...availabilityByDate[lastSelectedDate.date],
-          until: availableUntil
-        }
-      }
-    })
-  }
-  
-  const handleVehicleToggle = (isArrival) => {
-    if (isArrival) {
-      const newIsVehicle = !arrivalTravel.isVehicle
-      updateAttendance({
-        arrivalTravel: { ...arrivalTravel, isVehicle: newIsVehicle }
-      })
-      
-      // Recalculate if ferry is selected
-      if (arrivalTravel.ferryId && firstSelectedDate) {
-        const sailings = getSailingsForDate(firstSelectedDate.date, 'to-orcas')
-        const sailing = sailings.find(s => s.id === arrivalTravel.ferryId)
-        if (sailing) {
-          const availableFrom = calculateArrivalAvailability(sailing, newIsVehicle)
-          updateAttendance({
-            availabilityByDate: {
-              ...availabilityByDate,
-              [firstSelectedDate.date]: {
-                ...availabilityByDate[firstSelectedDate.date],
-                from: availableFrom
-              }
-            }
-          })
-        }
-      }
-    } else {
-      const newIsVehicle = !departureTravel.isVehicle
-      updateAttendance({
-        departureTravel: { ...departureTravel, isVehicle: newIsVehicle }
-      })
-      
-      // Recalculate if ferry is selected
-      if (departureTravel.ferryId && lastSelectedDate) {
-        const sailings = getSailingsForDate(lastSelectedDate.date, 'from-orcas')
-        const sailing = sailings.find(s => s.id === departureTravel.ferryId)
-        if (sailing) {
-          const availableUntil = calculateDepartureAvailability(sailing, newIsVehicle)
-          updateAttendance({
-            availabilityByDate: {
-              ...availabilityByDate,
-              [lastSelectedDate.date]: {
-                ...availabilityByDate[lastSelectedDate.date],
-                until: availableUntil
-              }
-            }
-          })
-        }
-      }
-    }
-  }
-  
-  const handleCustomTimeChange = (date, field, value) => {
-    updateAttendance({
-      availabilityByDate: {
-        ...availabilityByDate,
-        [date]: {
-          ...availabilityByDate[date],
-          [field]: value
-        }
-      }
-    })
-  }
-  
-  const arrivalSailings = firstSelectedDate 
-    ? getSailingsForDate(firstSelectedDate.date, 'to-orcas')
-    : []
-  
-  const departureSailings = lastSelectedDate
-    ? getSailingsForDate(lastSelectedDate.date, 'from-orcas')
-    : []
-  
-  const canContinue = selectedDates.length > 0
+  // Validation
+  const canContinue = arrival.date <= departure.date
+  const availabilitySummary = canContinue ? formatAvailabilitySummary(arrival, departure, ferries) : null
   
   return (
     <div className="attendance-step">
       <h2>When will you be there?</h2>
       
-      <section className="festival-days">
-        <h3>Festival Days</h3>
-        <div className="day-toggles">
-          {festivalDates.map(({ date, label }) => (
-            <button
-              key={date}
-              className={`day-toggle ${attendanceDays[date] ? 'selected' : ''}`}
-              onClick={() => handleDayToggle(date)}
-            >
-              {label}
-            </button>
-          ))}
+      {/* Arrival Section */}
+      <section className="travel-section">
+        <h3>Arrival</h3>
+        
+        <label>
+          Arriving
+          <select 
+            value={arrival.date}
+            onChange={(e) => {
+              const newDate = e.target.value
+              // Clear ferry if date changes
+              const updates = { date: newDate }
+              if (arrival.ferryId && !arrivalFerries.some(f => f.id === arrival.ferryId)) {
+                updates.ferryId = null
+              }
+              updateArrival(updates)
+            }}
+          >
+            {ARRIVAL_DATES.map(d => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+        </label>
+        
+        <div className="travel-type">
+          <button
+            className={`type-button ${arrival.type === 'already-on-island' ? 'selected' : ''}`}
+            onClick={() => updateArrival({ type: 'already-on-island', ferryId: null })}
+          >
+            Already on Orcas / arriving another way
+          </button>
+          
+          <button
+            className={`type-button ${arrival.type === 'ferry' ? 'selected' : ''}`}
+            onClick={() => updateArrival({ type: 'ferry' })}
+          >
+            Ferry from Anacortes
+          </button>
+          
+          <button
+            className={`type-button ${arrival.type === 'custom' ? 'selected' : ''}`}
+            onClick={() => updateArrival({ type: 'custom' })}
+          >
+            Custom available time
+          </button>
         </div>
+        
+        {/* Ferry Selection */}
+        {arrival.type === 'ferry' && (
+          <div className="ferry-selection">
+            {arrivalFerries.length > 0 ? (
+              <>
+                <div className="vehicle-toggle">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={arrival.isVehicle}
+                      onChange={(e) => updateArrival({ isVehicle: e.target.checked })}
+                    />
+                    Vehicle (requires reservation)
+                  </label>
+                </div>
+                
+                <div className="ferry-list">
+                  {arrivalFerries.map(ferry => (
+                    <button
+                      key={ferry.id}
+                      className={`ferry-option ${arrival.ferryId === ferry.id ? 'selected' : ''}`}
+                      onClick={() => updateArrival({ ferryId: ferry.id })}
+                    >
+                      <div className="ferry-times">
+                        <strong>{ferry.departureTime}</strong> Anacortes → <strong>{ferry.arrivalTime}</strong> Orcas
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="no-ferries">No ferry data available for this date.</p>
+            )}
+          </div>
+        )}
+        
+        {/* Custom Time */}
+        {arrival.type === 'custom' && (
+          <div className="custom-time">
+            <label>
+              Available from
+              <input
+                type="time"
+                value={arrival.customTime || ''}
+                onChange={(e) => updateArrival({ customTime: e.target.value })}
+              />
+            </label>
+          </div>
+        )}
       </section>
       
-      {selectedDates.length > 0 && (
-        <>
-          {/* Arrival */}
-          {firstSelectedDate && (
-            <section className="travel-section">
-              <h3>Arriving {firstSelectedDate.label}</h3>
-              
-              <div className="travel-options">
-                <button
-                  className={`travel-option ${arrivalTravel.type === 'already-on-island' ? 'selected' : ''}`}
-                  onClick={() => handleArrivalTypeChange('already-on-island')}
-                >
-                  Already on Orcas
-                </button>
-                <button
-                  className={`travel-option ${arrivalTravel.type === 'ferry' ? 'selected' : ''}`}
-                  onClick={() => handleArrivalTypeChange('ferry')}
-                >
-                  Ferry from Anacortes
-                </button>
-                <button
-                  className={`travel-option ${arrivalTravel.type === 'custom' ? 'selected' : ''}`}
-                  onClick={() => handleArrivalTypeChange('custom')}
-                >
-                  Set custom time
-                </button>
-              </div>
-              
-              {arrivalTravel.type === 'ferry' && (
-                <>
-                  <div className="vehicle-toggle">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={arrivalTravel.isVehicle}
-                        onChange={() => handleVehicleToggle(true)}
-                      />
-                      Traveling with vehicle
-                    </label>
-                  </div>
-                  
-                  <div className="ferry-sailings">
-                    <p className="ferry-note">
-                      {arrivalTravel.isVehicle && (
-                        <>Vehicle travelers: plan to arrive {VEHICLE_TERMINAL_BUFFER} min before departure. </>
-                      )}
-                      <a 
-                        href="https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/mobile/Default.aspx" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="reserve-link"
-                      >
-                        Reserve with WSF →
-                      </a>
-                    </p>
-                    
-                    {arrivalSailings.map(sailing => {
-                      const isSelected = arrivalTravel.ferryId === sailing.id
-                      const availability = availabilityByDate[firstSelectedDate.date]
-                      
-                      return (
-                        <button
-                          key={sailing.id}
-                          className={`ferry-option ${isSelected ? 'selected' : ''}`}
-                          onClick={() => handleArrivalFerrySelect(sailing.id, sailing)}
-                        >
-                          <div className="ferry-time">
-                            <strong>{formatTimeDisplay(sailing.departureTime)}</strong> Anacortes
-                            {' → '}
-                            <strong>{formatTimeDisplay(sailing.arrivalTime)}</strong> Orcas
-                          </div>
-                          {isSelected && availability && (
-                            <div className="derived-availability">
-                              Available for films: {formatAvailabilitySummary(availability.from, availability.until)}
-                            </div>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-              
-              {arrivalTravel.type === 'custom' && (
-                <div className="custom-time">
-                  <label>
-                    Available from:
-                    <input
-                      type="time"
-                      value={availabilityByDate[firstSelectedDate.date]?.from || '09:00'}
-                      onChange={(e) => handleCustomTimeChange(firstSelectedDate.date, 'from', e.target.value)}
-                    />
-                  </label>
-                </div>
-              )}
-            </section>
-          )}
-          
-          {/* Departure */}
-          {lastSelectedDate && selectedDates.length > 0 && (
-            <section className="travel-section">
-              <h3>Leaving {lastSelectedDate.label}</h3>
-              
-              <div className="travel-options">
-                <button
-                  className={`travel-option ${departureTravel.type === 'staying-on-island' ? 'selected' : ''}`}
-                  onClick={() => handleDepartureTypeChange('staying-on-island')}
-                >
-                  Staying on Orcas
-                </button>
-                <button
-                  className={`travel-option ${departureTravel.type === 'ferry' ? 'selected' : ''}`}
-                  onClick={() => handleDepartureTypeChange('ferry')}
-                >
-                  Ferry to Anacortes
-                </button>
-                <button
-                  className={`travel-option ${departureTravel.type === 'custom' ? 'selected' : ''}`}
-                  onClick={() => handleDepartureTypeChange('custom')}
-                >
-                  Set custom time
-                </button>
-              </div>
-              
-              {departureTravel.type === 'ferry' && (
-                <>
-                  <div className="vehicle-toggle">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={departureTravel.isVehicle}
-                        onChange={() => handleVehicleToggle(false)}
-                      />
-                      Traveling with vehicle
-                    </label>
-                  </div>
-                  
-                  <div className="ferry-sailings">
-                    <p className="ferry-note">
-                      {departureTravel.isVehicle && (
-                        <>Vehicle travelers: plan to arrive {VEHICLE_TERMINAL_BUFFER} min before departure. </>
-                      )}
-                      Account for {ISLAND_TRANSFER_BUFFER} min travel to ferry terminal.
-                    </p>
-                    
-                    {departureSailings.map(sailing => {
-                      const isSelected = departureTravel.ferryId === sailing.id
-                      const availability = availabilityByDate[lastSelectedDate.date]
-                      
-                      return (
-                        <button
-                          key={sailing.id}
-                          className={`ferry-option ${isSelected ? 'selected' : ''}`}
-                          onClick={() => handleDepartureFerrySelect(sailing.id, sailing)}
-                        >
-                          <div className="ferry-time">
-                            <strong>{formatTimeDisplay(sailing.departureTime)}</strong> Orcas
-                            {' → '}
-                            <strong>{formatTimeDisplay(sailing.arrivalTime)}</strong> Anacortes
-                          </div>
-                          {isSelected && availability && (
-                            <div className="derived-availability">
-                              Available for films: {formatAvailabilitySummary(availability.from, availability.until)}
-                            </div>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-              
-              {departureTravel.type === 'custom' && (
-                <div className="custom-time">
-                  <label>
-                    Available until:
-                    <input
-                      type="time"
-                      value={availabilityByDate[lastSelectedDate.date]?.until || '23:00'}
-                      onChange={(e) => handleCustomTimeChange(lastSelectedDate.date, 'until', e.target.value)}
-                    />
-                  </label>
-                </div>
-              )}
-            </section>
-          )}
-          
-          <button 
-            className="continue-button" 
-            onClick={onContinue}
-            disabled={!canContinue}
+      {/* Departure Section */}
+      <section className="travel-section">
+        <h3>Departure</h3>
+        
+        <label>
+          Leaving
+          <select 
+            value={departure.date}
+            onChange={(e) => {
+              const newDate = e.target.value
+              // Clear ferry if date changes
+              const updates = { date: newDate }
+              if (departure.ferryId && !departureFerries.some(f => f.id === departure.ferryId)) {
+                updates.ferryId = null
+              }
+              updateDeparture(updates)
+            }}
           >
-            Build My Festival Plan
+            {DEPARTURE_DATES.map(d => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+        </label>
+        
+        <div className="travel-type">
+          <button
+            className={`type-button ${departure.type === 'staying-longer' ? 'selected' : ''}`}
+            onClick={() => updateDeparture({ type: 'staying-longer', ferryId: null })}
+          >
+            Staying on Orcas / leaving another way
           </button>
-        </>
+          
+          <button
+            className={`type-button ${departure.type === 'ferry' ? 'selected' : ''}`}
+            onClick={() => updateDeparture({ type: 'ferry' })}
+          >
+            Ferry to Anacortes
+          </button>
+          
+          <button
+            className={`type-button ${departure.type === 'custom' ? 'selected' : ''}`}
+            onClick={() => updateDeparture({ type: 'custom' })}
+          >
+            Custom departure time
+          </button>
+        </div>
+        
+        {/* Ferry Selection */}
+        {departure.type === 'ferry' && (
+          <div className="ferry-selection">
+            {departureFerries.length > 0 ? (
+              <>
+                <div className="vehicle-toggle">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={departure.isVehicle}
+                      onChange={(e) => updateDeparture({ isVehicle: e.target.checked })}
+                    />
+                    Vehicle (allow extra time for check-in)
+                  </label>
+                </div>
+                
+                <div className="ferry-list">
+                  {departureFerries.map(ferry => (
+                    <button
+                      key={ferry.id}
+                      className={`ferry-option ${departure.ferryId === ferry.id ? 'selected' : ''}`}
+                      onClick={() => updateDeparture({ ferryId: ferry.id })}
+                    >
+                      <div className="ferry-times">
+                        <strong>{ferry.departureTime}</strong> Orcas → <strong>{ferry.arrivalTime}</strong> Anacortes
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="no-ferries">No ferry data available for this date.</p>
+            )}
+          </div>
+        )}
+        
+        {/* Custom Time */}
+        {departure.type === 'custom' && (
+          <div className="custom-time">
+            <label>
+              Leaving at
+              <input
+                type="time"
+                value={departure.customTime || ''}
+                onChange={(e) => updateDeparture({ customTime: e.target.value })}
+              />
+            </label>
+          </div>
+        )}
+      </section>
+      
+      {/* Availability Summary */}
+      {canContinue && availabilitySummary && (
+        <div className="availability-summary">
+          <strong>Your availability:</strong> {availabilitySummary}
+        </div>
       )}
+      
+      {!canContinue && (
+        <div className="validation-error">
+          Departure date must be on or after arrival date
+        </div>
+      )}
+      
+      {/* Continue Button */}
+      <button
+        onClick={onContinue}
+        className="continue-button"
+        disabled={!canContinue}
+      >
+        Build My Festival Plan
+      </button>
     </div>
   )
 }
-
-export default AttendanceStep
