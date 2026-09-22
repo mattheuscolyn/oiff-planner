@@ -7,4 +7,9 @@ export default defineConfig({
   // Production is served from https://mattheuscolyn.github.io/oiff-planner/
   // Local `npm run dev` still serves from `/`.
   base: '/oiff-planner/',
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js'
+  }
 })

@@ -6,9 +6,10 @@ import { generatePlanV2 } from '../planner/optimizerV2'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import DecisionsStep from './DecisionsStep'
+import ErrorBoundary from './ErrorBoundary'
 import './PlannerView.css'
 
-function PlannerView() {
+function PlannerViewInner() {
   const { interests } = useUserState()
   const { 
     constraints, 
@@ -23,6 +24,7 @@ function PlannerView() {
   
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [generationError, setGenerationError] = useState(null)
   
   const handleContinueToDecisions = () => {
     setCurrentStep('decisions')
@@ -40,6 +42,7 @@ function PlannerView() {
   const handleGenerate = () => {
     setIsGenerating(true)
     setProgress(0)
+    setGenerationError(null)
     
     const progressInterval = setInterval(() => {
       setProgress(prev => {
@@ -50,41 +53,49 @@ function PlannerView() {
     
     // Use setTimeout to allow UI to update
     setTimeout(() => {
-      const plan = generatePlanV2({
-        films,
-        screenings,
-        interests,
-        constraints,
-        attendanceConstraints: {
-          attendanceDays: attendance.attendanceDays,
-          availabilityByDate: attendance.availabilityByDate
-        },
-        hardDecisions,
-        timeBudgetMs: 750 // 750ms budget for mobile
-      })
-      
-      clearInterval(progressInterval)
-      setProgress(100)
-      
-      setTimeout(() => {
-        setGeneratedPlan(plan)
+      try {
+        const plan = generatePlanV2({
+          films,
+          screenings,
+          interests,
+          constraints,
+          attendanceConstraints: {
+            attendanceDays: attendance.attendanceDays,
+            availabilityByDate: attendance.availabilityByDate
+          },
+          hardDecisions,
+          timeBudgetMs: 750 // 750ms budget for mobile
+        })
+        
+        clearInterval(progressInterval)
+        setProgress(100)
+        
+        setTimeout(() => {
+          setGeneratedPlan(plan)
+          setIsGenerating(false)
+          setProgress(0)
+          
+          // Development-only performance logging
+          if (import.meta.env.DEV && plan.metadata) {
+            console.log('=== Plan Generation Performance ===')
+            console.log('Candidate films:', plan.metadata.candidateFilms)
+            console.log('Candidate screenings:', plan.metadata.candidateScreenings)
+            console.log('Greedy solution time:', plan.metadata.greedyMs?.toFixed(1), 'ms')
+            console.log('Initial solution size:', plan.metadata.initialSolutionSize)
+            console.log('Search nodes explored:', plan.metadata.nodesExplored)
+            console.log('Branches pruned:', plan.metadata.nodesPruned)
+            console.log('Total optimization time:', plan.metadata.totalMs?.toFixed(1), 'ms')
+            console.log('Optimality proven:', plan.metadata.optimalityProven)
+            console.log('===================================')
+          }
+        }, 300)
+      } catch (error) {
+        console.error('Plan generation failed:', error)
+        clearInterval(progressInterval)
         setIsGenerating(false)
         setProgress(0)
-        
-        // Development-only performance logging
-        if (process.env.NODE_ENV === 'development' && plan.metadata) {
-          console.log('=== Plan Generation Performance ===')
-          console.log('Candidate films:', plan.metadata.candidateFilms)
-          console.log('Candidate screenings:', plan.metadata.candidateScreenings)
-          console.log('Greedy solution time:', plan.metadata.greedyMs?.toFixed(1), 'ms')
-          console.log('Initial solution size:', plan.metadata.initialSolutionSize)
-          console.log('Search nodes explored:', plan.metadata.nodesExplored)
-          console.log('Branches pruned:', plan.metadata.nodesPruned)
-          console.log('Total optimization time:', plan.metadata.totalMs?.toFixed(1), 'ms')
-          console.log('Optimality proven:', plan.metadata.optimalityProven)
-          console.log('===================================')
-        }
-      }, 300)
+        setGenerationError(error.message || 'An unexpected error occurred')
+      }
     }, 50)
   }
   
@@ -100,6 +111,7 @@ function PlannerView() {
   const handleExcludeFilm = (filmId) => {
     setIsGenerating(true)
     setProgress(0)
+    setGenerationError(null)
     
     const newExcluded = [...constraints.excludedFilms, filmId]
     updateConstraints({ excludedFilms: newExcluded })
@@ -109,33 +121,42 @@ function PlannerView() {
     }, 80)
     
     setTimeout(() => {
-      const plan = generatePlanV2({
-        films,
-        screenings,
-        interests,
-        constraints: { ...constraints, excludedFilms: newExcluded },
-        attendanceConstraints: {
-          attendanceDays: attendance.attendanceDays,
-          availabilityByDate: attendance.availabilityByDate
-        },
-        hardDecisions,
-        timeBudgetMs: 750
-      })
-      
-      clearInterval(progressInterval)
-      setProgress(100)
-      
-      setTimeout(() => {
-        setGeneratedPlan(plan)
+      try {
+        const plan = generatePlanV2({
+          films,
+          screenings,
+          interests,
+          constraints: { ...constraints, excludedFilms: newExcluded },
+          attendanceConstraints: {
+            attendanceDays: attendance.attendanceDays,
+            availabilityByDate: attendance.availabilityByDate
+          },
+          hardDecisions,
+          timeBudgetMs: 750
+        })
+        
+        clearInterval(progressInterval)
+        setProgress(100)
+        
+        setTimeout(() => {
+          setGeneratedPlan(plan)
+          setIsGenerating(false)
+          setProgress(0)
+        }, 200)
+      } catch (error) {
+        console.error('Plan regeneration failed:', error)
+        clearInterval(progressInterval)
         setIsGenerating(false)
         setProgress(0)
-      }, 200)
+        setGenerationError(error.message || 'An unexpected error occurred')
+      }
     }, 50)
   }
   
   const handleLockScreening = (screeningId) => {
     setIsGenerating(true)
     setProgress(0)
+    setGenerationError(null)
     
     const newLocked = [...constraints.lockedScreenings, screeningId]
     updateConstraints({ lockedScreenings: newLocked })
@@ -145,27 +166,35 @@ function PlannerView() {
     }, 80)
     
     setTimeout(() => {
-      const plan = generatePlanV2({
-        films,
-        screenings,
-        interests,
-        constraints: { ...constraints, lockedScreenings: newLocked },
-        attendanceConstraints: {
-          attendanceDays: attendance.attendanceDays,
-          availabilityByDate: attendance.availabilityByDate
-        },
-        hardDecisions,
-        timeBudgetMs: 750
-      })
-      
-      clearInterval(progressInterval)
-      setProgress(100)
-      
-      setTimeout(() => {
-        setGeneratedPlan(plan)
+      try {
+        const plan = generatePlanV2({
+          films,
+          screenings,
+          interests,
+          constraints: { ...constraints, lockedScreenings: newLocked },
+          attendanceConstraints: {
+            attendanceDays: attendance.attendanceDays,
+            availabilityByDate: attendance.availabilityByDate
+          },
+          hardDecisions,
+          timeBudgetMs: 750
+        })
+        
+        clearInterval(progressInterval)
+        setProgress(100)
+        
+        setTimeout(() => {
+          setGeneratedPlan(plan)
+          setIsGenerating(false)
+          setProgress(0)
+        }, 200)
+      } catch (error) {
+        console.error('Plan regeneration failed:', error)
+        clearInterval(progressInterval)
         setIsGenerating(false)
         setProgress(0)
-      }, 200)
+        setGenerationError(error.message || 'An unexpected error occurred')
+      }
     }, 50)
   }
   
@@ -186,22 +215,27 @@ function PlannerView() {
     setGeneratedPlan(null)
   }
   
+  // Validate currentStep - fallback to attendance for unknown/corrupt values
+  const validSteps = ['attendance', 'decisions', 'plan']
+  const safeCurrentStep = validSteps.includes(currentStep) ? currentStep : 'attendance'
+
   // Render current step
   return (
     <div className="planner-view">
-      {currentStep === 'attendance' && (
+      {safeCurrentStep === 'attendance' && (
         <AttendanceStep onContinue={handleContinueToDecisions} />
       )}
       
-      {currentStep === 'decisions' && (
+      {safeCurrentStep === 'decisions' && (
         <DecisionsStep 
           onContinue={handleContinueToPlan}
           onBack={handleBackToAttendance}
         />
       )}
       
-      {currentStep === 'plan' && (
+      {safeCurrentStep === 'plan' && (
         <div className="plan-step">
+          {/* Loading state */}
           {isGenerating && (
             <div className="progress-container">
               <div className="progress-bar">
@@ -211,7 +245,35 @@ function PlannerView() {
             </div>
           )}
           
-          {!isGenerating && generatedPlan && (
+          {/* Error state */}
+          {!isGenerating && generationError && (
+            <div className="planner-error">
+              <h2>Plan Generation Failed</h2>
+              <p>{generationError}</p>
+              <div className="error-actions">
+                <button onClick={handleGenerate} className="retry-button">
+                  Try Again
+                </button>
+                <button onClick={handleStartOver} className="start-over-button">
+                  Back to Planner Setup
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* No plan yet (recovery state) */}
+          {!isGenerating && !generationError && !generatedPlan && (
+            <div className="planner-no-plan">
+              <h2>No Plan Generated</h2>
+              <p>Let's set up your festival plan.</p>
+              <button onClick={handleStartOver} className="start-over-button">
+                Back to Planner Setup
+              </button>
+            </div>
+          )}
+          
+          {/* Successful plan */}
+          {!isGenerating && !generationError && generatedPlan && (
             <>
               {generatedPlan.infeasible ? (
                 <div className="planner-error">
@@ -395,6 +457,25 @@ function formatInterest(interest) {
     'unrated': 'Unrated'
   }
   return labels[interest] || interest
+}
+
+// Wrap with Error Boundary
+function PlannerView() {
+  const { resetPlannerSession } = usePlanner()
+  
+  return (
+    <ErrorBoundary
+      onReset={() => {
+        // Try again - just re-render
+      }}
+      onResetPlanner={() => {
+        // Reset only planner session state, not film ratings or My Plan
+        resetPlannerSession()
+      }}
+    >
+      <PlannerViewInner />
+    </ErrorBoundary>
+  )
 }
 
 export default PlannerView
