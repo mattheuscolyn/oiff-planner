@@ -25,14 +25,13 @@ export function generatePlanV3(config) {
     interests = {},
     constraints = {},
     attendanceConstraints = {},
-    hardDecisions = {},
     timeBudgetMs = 3000 // More generous for exact solving
   } = config
 
   const startTime = performance.now()
 
   // Precompute data structures
-  const data = precomputeData(films, screenings, interests, constraints, attendanceConstraints, hardDecisions)
+  const data = precomputeData(films, screenings, interests, constraints, attendanceConstraints)
 
   console.log(`[OptimizerV3] Candidate films: ${data.candidateFilms.length}`)
   console.log(`[OptimizerV3] Candidate screenings: ${data.candidateScreenings.length}`)
@@ -52,7 +51,7 @@ export function generatePlanV3(config) {
 /**
  * Precompute data structures
  */
-function precomputeData(films, screenings, interests, constraints, attendanceConstraints, hardDecisions) {
+function precomputeData(films, screenings, interests, constraints, attendanceConstraints) {
   const {
     excludedFilms = [],
     lockedScreenings = [],
@@ -61,14 +60,6 @@ function precomputeData(films, screenings, interests, constraints, attendanceCon
   } = constraints
 
   const { attendanceDays = {}, availabilityByDate = {} } = attendanceConstraints
-
-  // Build decision exclusions
-  const decisionExcluded = new Set()
-  Object.values(hardDecisions || {}).forEach(decision => {
-    if (decision.excluded) {
-      decision.excluded.forEach(filmId => decisionExcluded.add(filmId))
-    }
-  })
 
   // Build maps
   const filmMap = new Map()
@@ -93,7 +84,6 @@ function precomputeData(films, screenings, interests, constraints, attendanceCon
   for (const film of films) {
     // Skip excluded films
     if (excludedFilms.includes(film.id)) continue
-    if (decisionExcluded.has(film.id)) continue
 
     const interest = interests[film.id]
     if (!includeSkip && interest === INTEREST_LEVELS.SKIP) continue

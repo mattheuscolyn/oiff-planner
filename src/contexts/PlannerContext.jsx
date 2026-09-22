@@ -38,21 +38,26 @@ const DEFAULT_STATE = {
     includeSkip: false,
     includeSeen: false
   },
-  // Simplified: Arrival and departure configuration
-  arrivalDate: '2026-10-14', // Tuesday Oct 13 through Sunday Oct 18
-  arrivalType: 'already-on-island', // 'already-on-island' | 'ferry' | 'custom'
-  arrivalDetails: {
-    ferryId: null,
-    isVehicle: false,
-    customTime: null
+  // Keep existing attendance structure for this PR
+  // Will migrate to arrival/departure in PR #10
+  attendance: {
+    attendanceDays: getDefaultAttendanceDays(),
+    availabilityByDate: getDefaultAvailabilityByDate(),
+    arrivalTravel: {
+      type: 'already-on-island',
+      ferryId: null,
+      isVehicle: false,
+      customTime: null
+    },
+    departureTravel: {
+      type: 'staying-on-island',
+      ferryId: null,
+      isVehicle: false,
+      customTime: null
+    }
   },
-  departureDate: '2026-10-18', // Wednesday Oct 14 through Monday Oct 19
-  departureType: 'staying-longer', // 'staying-longer' | 'ferry' | 'custom'
-  departureDetails: {
-    ferryId: null,
-    isVehicle: false,
-    customTime: null
-  },
+  // Removed: hardDecisions (completely eliminated)
+  // Removed: currentStep (no more wizard)
   generatedPlan: null
 }
 
@@ -71,22 +76,30 @@ export function PlannerProvider({ children }) {
           const migrated = {
             ...DEFAULT_STATE,
             version: STATE_VERSION,
-            // Try to preserve arrival/departure if reasonable
-            arrivalDate: parsed.arrivalDate || DEFAULT_STATE.arrivalDate,
-            departureDate: parsed.departureDate || DEFAULT_STATE.departureDate,
-            // Discard old hardDecisions completely
-            // Discard old currentStep (no more multi-step wizard)
+            // Preserve attendance preferences if valid
+            attendance: parsed.attendance?.attendanceDays 
+              ? {
+                  ...DEFAULT_STATE.attendance,
+                  attendanceDays: parsed.attendance.attendanceDays,
+                  availabilityByDate: parsed.attendance.availabilityByDate || DEFAULT_STATE.attendance.availabilityByDate,
+                  arrivalTravel: parsed.attendance.arrivalTravel || DEFAULT_STATE.attendance.arrivalTravel,
+                  departureTravel: parsed.attendance.departureTravel || DEFAULT_STATE.attendance.departureTravel
+                }
+              : DEFAULT_STATE.attendance,
+            // CRITICAL: Completely discard old hardDecisions
+            // This prevents stale binary decisions from constraining new plans
+            // Discard old currentStep (no more wizard)
             // Discard stale generated plans
             generatedPlan: null,
             constraints: {
               ...DEFAULT_STATE.constraints,
-              // Clear stale locks/exclusions
-              lockedScreenings: [],
-              excludedFilms: []
+              // Preserve locks/exclusions if present
+              lockedScreenings: parsed.constraints?.lockedScreenings || [],
+              excludedFilms: parsed.constraints?.excludedFilms || []
             }
           }
           
-          console.log('Migration complete: removed hardDecisions, simplified to arrival/departure model')
+          console.log('Migration complete: removed hardDecisions and currentStep')
           
           return migrated
         }
@@ -131,21 +144,10 @@ export function PlannerProvider({ children }) {
     }))
   }, [])
 
-  const setArrival = useCallback((date, type, details) => {
+  const updateAttendance = useCallback((updates) => {
     setState(prev => ({
       ...prev,
-      arrivalDate: date,
-      arrivalType: type,
-      arrivalDetails: details || prev.arrivalDetails
-    }))
-  }, [])
-
-  const setDeparture = useCallback((date, type, details) => {
-    setState(prev => ({
-      ...prev,
-      departureDate: date,
-      departureType: type,
-      departureDetails: details || prev.departureDetails
+      attendance: { ...prev.attendance, ...updates }
     }))
   }, [])
 
@@ -181,8 +183,7 @@ export function PlannerProvider({ children }) {
     ...state,
     setObjective,
     updateConstraints,
-    setArrival,
-    setDeparture,
+    updateAttendance,
     setGeneratedPlan,
     resetPlanner,
     resetPlannerSession

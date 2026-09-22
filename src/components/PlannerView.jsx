@@ -5,7 +5,6 @@ import { usePlanner } from '../contexts/PlannerContext'
 import { generatePlanV3 } from '../planner/optimizerV3'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
-import DecisionsStep from './DecisionsStep'
 import ErrorBoundary from './ErrorBoundary'
 import './PlannerView.css'
 
@@ -14,28 +13,20 @@ function PlannerViewInner() {
   const { 
     constraints, 
     attendance,
-    hardDecisions,
     generatedPlan, 
     setGeneratedPlan,
-    currentStep,
-    setCurrentStep,
     updateConstraints
   } = usePlanner()
+  
+  // Simple state: are we showing setup or results?
+  const [showingResults, setShowingResults] = useState(false)
   
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
   const [generationError, setGenerationError] = useState(null)
   
-  const handleContinueToDecisions = () => {
-    setCurrentStep('decisions')
-  }
-  
-  const handleBackToAttendance = () => {
-    setCurrentStep('attendance')
-  }
-  
-  const handleContinueToPlan = () => {
-    setCurrentStep('plan')
+  const handleBuildPlan = () => {
+    setShowingResults(true)
     handleGenerate()
   }
   
@@ -63,7 +54,6 @@ function PlannerViewInner() {
             attendanceDays: attendance.attendanceDays,
             availabilityByDate: attendance.availabilityByDate
           },
-          hardDecisions,
           timeBudgetMs: 750 // 750ms budget for mobile
         })
         
@@ -131,7 +121,7 @@ function PlannerViewInner() {
             attendanceDays: attendance.attendanceDays,
             availabilityByDate: attendance.availabilityByDate
           },
-          hardDecisions,
+          
           timeBudgetMs: 750
         })
         
@@ -176,7 +166,7 @@ function PlannerViewInner() {
             attendanceDays: attendance.attendanceDays,
             availabilityByDate: attendance.availabilityByDate
           },
-          hardDecisions,
+          
           timeBudgetMs: 750
         })
         
@@ -211,29 +201,18 @@ function PlannerViewInner() {
   }
   
   const handleStartOver = () => {
-    setCurrentStep('attendance')
+    setShowingResults(false)
     setGeneratedPlan(null)
   }
   
-  // Validate currentStep - fallback to attendance for unknown/corrupt values
-  const validSteps = ['attendance', 'decisions', 'plan']
-  const safeCurrentStep = validSteps.includes(currentStep) ? currentStep : 'attendance'
-
-  // Render current step
+  // Simple two-state UI: setup or results
   return (
     <div className="planner-view">
-      {safeCurrentStep === 'attendance' && (
-        <AttendanceStep onContinue={handleContinueToDecisions} />
+      {!showingResults && (
+        <AttendanceStep onContinue={handleBuildPlan} />
       )}
       
-      {safeCurrentStep === 'decisions' && (
-        <DecisionsStep 
-          onContinue={handleContinueToPlan}
-          onBack={handleBackToAttendance}
-        />
-      )}
-      
-      {safeCurrentStep === 'plan' && (
+      {showingResults && (
         <div className="plan-step">
           {/* Loading state */}
           {isGenerating && (
