@@ -98,16 +98,26 @@ function precomputeData(films, screenings, interests, constraints, attendanceCon
       // Check attendance day
       if (!attendanceDays[s.date]) return false
 
-      // Check time availability
+      // Check time availability - enforce EACH constraint independently
       const dayAvail = availabilityByDate[s.date]
-      if (dayAvail && dayAvail.from && dayAvail.until) {
+      if (dayAvail) {
         const screeningStart = parseTimeToMinutes(s.startTime)
         const screeningEnd = parseTimeToMinutes(getScreeningEndTime(s, film))
-        const availFrom = parseTimeToMinutes(dayAvail.from)
-        const availUntil = parseTimeToMinutes(dayAvail.until)
         
-        if (screeningStart < availFrom || screeningEnd > availUntil) {
-          return false
+        // Check 'from' constraint if present
+        if (dayAvail.from) {
+          const availFrom = parseTimeToMinutes(dayAvail.from)
+          if (screeningStart < availFrom) {
+            return false
+          }
+        }
+        
+        // Check 'until' constraint if present
+        if (dayAvail.until) {
+          const availUntil = parseTimeToMinutes(dayAvail.until)
+          if (screeningEnd > availUntil) {
+            return false
+          }
         }
       }
 
