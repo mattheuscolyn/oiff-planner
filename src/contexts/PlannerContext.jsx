@@ -5,7 +5,7 @@ import { getFestivalDates, getDefaultAvailability } from '../utils/ferryData'
 const PlannerContext = createContext(null)
 
 const STORAGE_KEY = 'oiff-planner-state'
-const STATE_VERSION = '3' // Incremented for optimizer V2 changes (PR #6)
+const STATE_VERSION = '4' // Simplified arrival/departure model, removed hardDecisions
 
 // Initialize default attendance days (all selected)
 function getDefaultAttendanceDays() {
@@ -38,28 +38,22 @@ const DEFAULT_STATE = {
     includeSkip: false,
     includeSeen: false
   },
-  // New: Attendance constraints
-  attendance: {
-    attendanceDays: getDefaultAttendanceDays(),
-    availabilityByDate: getDefaultAvailabilityByDate(),
-    arrivalTravel: {
-      type: 'already-on-island', // 'already-on-island' | 'ferry' | 'custom'
-      ferryId: null,
-      isVehicle: false,
-      customTime: null
-    },
-    departureTravel: {
-      type: 'staying-on-island', // 'staying-on-island' | 'ferry' | 'custom'
-      ferryId: null,
-      isVehicle: false,
-      customTime: null
-    }
+  // Simplified: Arrival and departure configuration
+  arrivalDate: '2026-10-14', // Tuesday Oct 13 through Sunday Oct 18
+  arrivalType: 'already-on-island', // 'already-on-island' | 'ferry' | 'custom'
+  arrivalDetails: {
+    ferryId: null,
+    isVehicle: false,
+    customTime: null
   },
-  // New: Hard decisions from conflict resolution
-  hardDecisions: {}, // { decisionKey: { chosen: filmId, excluded: [filmIds] } }
-  generatedPlan: null,
-  // New: Current step in the wizard
-  currentStep: 'attendance' // 'attendance' | 'decisions' | 'plan'
+  departureDate: '2026-10-18', // Wednesday Oct 14 through Monday Oct 19
+  departureType: 'staying-longer', // 'staying-longer' | 'ferry' | 'custom'
+  departureDetails: {
+    ferryId: null,
+    isVehicle: false,
+    customTime: null
+  },
+  generatedPlan: null
 }
 
 export function PlannerProvider({ children }) {
@@ -73,31 +67,26 @@ export function PlannerProvider({ children }) {
         if (parsed.version !== STATE_VERSION) {
           console.log(`Migrating planner state from v${parsed.version || 'unknown'} to v${STATE_VERSION}`)
           
-          // Migrate safe fields, reset incompatible ones
+          // Migrate safe fields, discard incompatible ones
           const migrated = {
             ...DEFAULT_STATE,
             version: STATE_VERSION,
-            // Preserve attendance preferences if valid
-            attendance: parsed.attendance?.attendanceDays 
-              ? {
-                  ...DEFAULT_STATE.attendance,
-                  attendanceDays: parsed.attendance.attendanceDays,
-                  availabilityByDate: parsed.attendance.availabilityByDate || DEFAULT_STATE.attendance.availabilityByDate,
-                  arrivalTravel: parsed.attendance.arrivalTravel || DEFAULT_STATE.attendance.arrivalTravel,
-                  departureTravel: parsed.attendance.departureTravel || DEFAULT_STATE.attendance.departureTravel
-                }
-              : DEFAULT_STATE.attendance,
-            // Reset planner session state (incompatible with new optimizer)
+            // Try to preserve arrival/departure if reasonable
+            arrivalDate: parsed.arrivalDate || DEFAULT_STATE.arrivalDate,
+            departureDate: parsed.departureDate || DEFAULT_STATE.departureDate,
+            // Discard old hardDecisions completely
+            // Discard old currentStep (no more multi-step wizard)
+            // Discard stale generated plans
             generatedPlan: null,
-            currentStep: 'attendance', // Always start fresh after migration
-            hardDecisions: {},
             constraints: {
               ...DEFAULT_STATE.constraints,
-              // Clear stale locks/exclusions (may reference invalid IDs)
+              // Clear stale locks/exclusions
               lockedScreenings: [],
               excludedFilms: []
             }
           }
+          
+          console.log('Migration complete: removed hardDecisions, simplified to arrival/departure model')
           
           return migrated
         }
@@ -142,17 +131,21 @@ export function PlannerProvider({ children }) {
     }))
   }, [])
 
-  const updateAttendance = useCallback((updates) => {
+  const setArrival = useCallback((date, type, details) => {
     setState(prev => ({
       ...prev,
-      attendance: { ...prev.attendance, ...updates }
+      arrivalDate: date,
+      arrivalType: type,
+      arrivalDetails: details || prev.arrivalDetails
     }))
   }, [])
 
-  const updateHardDecisions = useCallback((updates) => {
+  const setDeparture = useCallback((date, type, details) => {
     setState(prev => ({
       ...prev,
-      hardDecisions: { ...prev.hardDecisions, ...updates }
+      departureDate: date,
+      departureType: type,
+      departureDetails: details || prev.departureDetails
     }))
   }, [])
 
@@ -188,10 +181,9 @@ export function PlannerProvider({ children }) {
     ...state,
     setObjective,
     updateConstraints,
-    updateAttendance,
-    updateHardDecisions,
+    setArrival,
+    setDeparture,
     setGeneratedPlan,
-    setCurrentStep,
     resetPlanner,
     resetPlannerSession
   }
