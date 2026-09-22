@@ -370,7 +370,7 @@ function AttendanceStep({ onContinue }) {
             onClick={onContinue}
             disabled={!canContinue}
           >
-            Continue to Decisions
+            Build My Festival Plan
           </button>
         </>
       )}
