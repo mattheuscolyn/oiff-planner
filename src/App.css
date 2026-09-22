@@ -1,16 +1,95 @@
 .app {
-  max-width: 40rem;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  color: #fff;
+  padding: 1.5rem 1.25rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.header-content {
+  max-width: 56rem;
   margin: 0 auto;
-  padding: 2rem 1.25rem;
 }
 
-.app h1 {
-  margin: 0 0 0.5rem;
+.app-title {
+  margin: 0;
   font-size: 1.75rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
-.app p {
-  margin: 0.35rem 0;
-  line-height: 1.5;
+.app-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  background: #fff;
+  border-bottom: 2px solid #e1e8ed;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.nav-button {
+  flex: 1;
+  padding: 1rem;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #5a6c7d;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+}
+
+.nav-button:hover {
+  background: #f7f9fa;
+  color: #2c3e50;
+}
+
+.nav-button.active {
+  color: #2c3e50;
+  border-bottom-color: #3498db;
+  background: #f7f9fa;
+}
+
+.app-main {
+  flex: 1;
+  max-width: 56rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .app-header {
+    padding: 2rem 2rem 1.75rem;
+  }
+
+  .app-title {
+    font-size: 2.25rem;
+  }
+
+  .app-subtitle {
+    font-size: 1rem;
+  }
+
+  .app-main {
+    padding: 2rem;
+  }
+
+  .nav-button {
+    padding: 1.25rem;
+  }
 }
