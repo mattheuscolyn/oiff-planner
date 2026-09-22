@@ -70,6 +70,20 @@ function PlannerView() {
         setGeneratedPlan(plan)
         setIsGenerating(false)
         setProgress(0)
+        
+        // Development-only performance logging
+        if (process.env.NODE_ENV === 'development' && plan.metadata) {
+          console.log('=== Plan Generation Performance ===')
+          console.log('Candidate films:', plan.metadata.candidateFilms)
+          console.log('Candidate screenings:', plan.metadata.candidateScreenings)
+          console.log('Greedy solution time:', plan.metadata.greedyMs?.toFixed(1), 'ms')
+          console.log('Initial solution size:', plan.metadata.initialSolutionSize)
+          console.log('Search nodes explored:', plan.metadata.nodesExplored)
+          console.log('Branches pruned:', plan.metadata.nodesPruned)
+          console.log('Total optimization time:', plan.metadata.totalMs?.toFixed(1), 'ms')
+          console.log('Optimality proven:', plan.metadata.optimalityProven)
+          console.log('===================================')
+        }
       }, 300)
     }, 50)
   }
