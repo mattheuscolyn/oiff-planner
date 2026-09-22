@@ -34,7 +34,9 @@ export function deriveFestivalAvailability(arrival, departure, ferries = []) {
   const availabilityByDate = {}
   
   festivalDates.forEach(festivalDate => {
-    // Include festival date if it's within [arrival, departure]
+    // Include festival date if it falls within the travel interval
+    // BUT: arrival/departure dates themselves may be travel-only days
+    // Only include actual festival dates (Oct 14-18)
     if (festivalDate >= arrivalDate && festivalDate <= departureDate) {
       attendanceDays[festivalDate] = true
       
