@@ -149,3 +149,28 @@ export function getDefaultAvailability() {
     until: '23:00'
   }
 }
+
+/**
+ * Get all ferries with dates
+ */
+export function getFerries() {
+  // Generate ferries with specific dates for festival window
+  const ferries = []
+  const dates = ['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19']
+  
+  dates.forEach(date => {
+    const toOrcas = getSailingsForDate(date, 'to-orcas')
+    const fromOrcas = getSailingsForDate(date, 'from-orcas')
+    ferries.push(...toOrcas, ...fromOrcas)
+  })
+  
+  return ferries
+}
+
+/**
+ * Get ferry by ID
+ */
+export function getFerryById(id, ferryList) {
+  const list = ferryList || getFerries()
+  return list.find(f => f.id === id)
+}
