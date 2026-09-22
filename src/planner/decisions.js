@@ -35,7 +35,7 @@ export function isScreeningFeasible(screening, film, attendanceConstraints) {
   }
   
   // Parse times as minutes since midnight
-  const screeningStart = parseTimeToMinutes(screening.time)
+  const screeningStart = parseTimeToMinutes(screening.startTime)
   const screeningEnd = parseTimeToMinutes(getScreeningEndTime(screening, film))
   const availableFrom = parseTimeToMinutes(from)
   const availableUntil = parseTimeToMinutes(until)
@@ -102,22 +102,28 @@ export function hasCompatibleScreeningPair(filmA, filmB, allScreenings, attendan
  * @param {object} attendanceConstraints - Attendance constraints
  * @param {Array} lockedScreenings - Locked screening IDs
  * @param {object} existingDecisions - Existing hard decisions
+ * @param {Array} excludedFilms - Films excluded from consideration
  * @returns {Array} Array of unavoidable conflict objects
  */
-export function detectUnavoidableConflicts(films, screenings, interests, attendanceConstraints, lockedScreenings = [], existingDecisions = {}) {
+export function detectUnavoidableConflicts(films, screenings, interests, attendanceConstraints, lockedScreenings = [], existingDecisions = {}, excludedFilms = []) {
   const conflicts = []
   
-  // Only consider films the user has rated (excluding Skip/Seen)
-  const interestedFilms = films.filter(film => {
+  // Consider ALL films except those explicitly excluded (Skip/Seen/session exclusions)
+  const eligibleFilms = films.filter(film => {
     const interest = interests[film.id]
-    return interest && interest !== 'skip' && interest !== 'seen'
+    // Exclude films marked as Skip or Seen
+    if (interest === 'skip' || interest === 'seen') return false
+    // Exclude films explicitly removed from this planning session
+    if (excludedFilms.includes(film.id)) return false
+    // Include everything else (rated or unrated)
+    return true
   })
   
-  // Check each pair of interested films
-  for (let i = 0; i < interestedFilms.length; i++) {
-    for (let j = i + 1; j < interestedFilms.length; j++) {
-      const filmA = interestedFilms[i]
-      const filmB = interestedFilms[j]
+  // Check each pair of eligible films
+  for (let i = 0; i < eligibleFilms.length; i++) {
+    for (let j = i + 1; j < eligibleFilms.length; j++) {
+      const filmA = eligibleFilms[i]
+      const filmB = eligibleFilms[j]
       
       // Skip if already decided
       const decisionKey = getDecisionKey(filmA.id, filmB.id)
@@ -127,9 +133,9 @@ export function detectUnavoidableConflicts(films, screenings, interests, attenda
       
       // Check if films have ANY compatible screening pair
       if (!hasCompatibleScreeningPair(filmA, filmB, screenings, attendanceConstraints, lockedScreenings)) {
-        // This is an unavoidable conflict
-        const interestA = interests[filmA.id]
-        const interestB = interests[filmB.id]
+        // This is an unavoidable conflict - a schedule fact
+        const interestA = interests[filmA.id] || 'unrated'
+        const interestB = interests[filmB.id] || 'unrated'
         
         conflicts.push({
           films: [filmA, filmB],
@@ -142,6 +148,7 @@ export function detectUnavoidableConflicts(films, screenings, interests, attenda
   }
   
   // Sort conflicts by priority (highest first)
+  // Priority is based on ratings for presentation, but conflict exists regardless
   conflicts.sort((a, b) => b.priority - a.priority)
   
   return conflicts
