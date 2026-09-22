@@ -27,9 +27,10 @@ function DecisionsStep({ onContinue, onBack }) {
       interests,
       attendanceConstraints,
       constraints.lockedScreenings,
-      hardDecisions
+      hardDecisions,
+      constraints.excludedFilms
     )
-  }, [interests, attendanceConstraints, constraints.lockedScreenings, hardDecisions])
+  }, [interests, attendanceConstraints, constraints.lockedScreenings, hardDecisions, constraints.excludedFilms])
   
   // Group conflicts
   const groupedConflicts = useMemo(() => {

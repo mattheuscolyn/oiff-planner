@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { films, screenings } from '../utils/festivalData'
 import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
-import { generatePlan } from '../planner/optimizer'
-import { OBJECTIVES } from '../planner/scoring'
+import { generatePlanV2 } from '../planner/optimizerV2'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import DecisionsStep from './DecisionsStep'
@@ -49,23 +48,19 @@ function PlannerView() {
       })
     }, 100)
     
+    // Use setTimeout to allow UI to update
     setTimeout(() => {
-      // Prepare constraints with attendance and hard decisions
-      const enhancedConstraints = {
-        ...constraints,
+      const plan = generatePlanV2({
+        films,
+        screenings,
+        interests,
+        constraints,
         attendanceConstraints: {
           attendanceDays: attendance.attendanceDays,
           availabilityByDate: attendance.availabilityByDate
         },
-        hardDecisions
-      }
-      
-      const plan = generatePlan({
-        films,
-        screenings,
-        interests,
-        constraints: enhancedConstraints,
-        objective: OBJECTIVES.MOST_FILMS // Use simplified objective
+        hardDecisions,
+        timeBudgetMs: 750 // 750ms budget for mobile
       })
       
       clearInterval(progressInterval)
@@ -76,7 +71,7 @@ function PlannerView() {
         setIsGenerating(false)
         setProgress(0)
       }, 300)
-    }, 150)
+    }, 50)
   }
   
   const handleUsePlan = () => {
@@ -100,22 +95,17 @@ function PlannerView() {
     }, 80)
     
     setTimeout(() => {
-      const enhancedConstraints = {
-        ...constraints,
-        excludedFilms: newExcluded,
+      const plan = generatePlanV2({
+        films,
+        screenings,
+        interests,
+        constraints: { ...constraints, excludedFilms: newExcluded },
         attendanceConstraints: {
           attendanceDays: attendance.attendanceDays,
           availabilityByDate: attendance.availabilityByDate
         },
-        hardDecisions
-      }
-      
-      const plan = generatePlan({
-        films,
-        screenings,
-        interests,
-        constraints: enhancedConstraints,
-        objective: OBJECTIVES.MOST_FILMS
+        hardDecisions,
+        timeBudgetMs: 750
       })
       
       clearInterval(progressInterval)
@@ -126,7 +116,7 @@ function PlannerView() {
         setIsGenerating(false)
         setProgress(0)
       }, 200)
-    }, 120)
+    }, 50)
   }
   
   const handleLockScreening = (screeningId) => {
@@ -141,22 +131,17 @@ function PlannerView() {
     }, 80)
     
     setTimeout(() => {
-      const enhancedConstraints = {
-        ...constraints,
-        lockedScreenings: newLocked,
+      const plan = generatePlanV2({
+        films,
+        screenings,
+        interests,
+        constraints: { ...constraints, lockedScreenings: newLocked },
         attendanceConstraints: {
           attendanceDays: attendance.attendanceDays,
           availabilityByDate: attendance.availabilityByDate
         },
-        hardDecisions
-      }
-      
-      const plan = generatePlan({
-        films,
-        screenings,
-        interests,
-        constraints: enhancedConstraints,
-        objective: OBJECTIVES.MOST_FILMS
+        hardDecisions,
+        timeBudgetMs: 750
       })
       
       clearInterval(progressInterval)
@@ -167,7 +152,7 @@ function PlannerView() {
         setIsGenerating(false)
         setProgress(0)
       }, 200)
-    }, 120)
+    }, 50)
   }
   
   const handleUnlockScreening = (screeningId) => {
