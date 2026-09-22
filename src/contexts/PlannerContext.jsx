@@ -155,9 +155,7 @@ export function PlannerProvider({ children }) {
     setState(prev => ({ ...prev, generatedPlan: plan }))
   }, [])
 
-  const setCurrentStep = useCallback((step) => {
-    setState(prev => ({ ...prev, currentStep: step }))
-  }, [])
+  // currentStep removed - no more wizard flow
 
   const resetPlanner = useCallback(() => {
     setState(DEFAULT_STATE)
