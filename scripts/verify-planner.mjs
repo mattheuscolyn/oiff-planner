@@ -18,9 +18,19 @@ const __dirname = path.dirname(__filename)
 const filmsData = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../src/data/films.json'), 'utf-8')
 )
-const screeningsData = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../src/data/screenings.json'), 'utf-8')
-)
+
+// Extract screenings from film objects
+const screeningsData = []
+filmsData.forEach(film => {
+  if (film.screenings && Array.isArray(film.screenings)) {
+    film.screenings.forEach(screening => {
+      screeningsData.push({
+        ...screening,
+        filmId: film.id
+      })
+    })
+  }
+})
 
 console.log('📊 Festival Data Verification for PR #9\n')
 console.log(`Films: ${filmsData.length}`)
