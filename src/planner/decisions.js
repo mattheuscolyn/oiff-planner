@@ -202,15 +202,16 @@ export function getAutoResolution(conflict) {
   const priorityA = levels[interestA] || 0
   const priorityB = levels[interestB] || 0
   
-  // Only auto-resolve if there's a clear priority difference
-  if (priorityA > priorityB && priorityA >= 2) {
+  // Only auto-resolve if there's a significant priority difference (at least 2 levels)
+  // Must See (3) vs Maybe (1) or unrated (0)
+  if (priorityA - priorityB >= 2 && priorityA >= 3) {
     return {
       chosen: conflict.films[0].id,
       reason: `You marked "${conflict.films[0].title}" as ${formatInterestLevel(interestA)}`
     }
   }
   
-  if (priorityB > priorityA && priorityB >= 2) {
+  if (priorityB - priorityA >= 2 && priorityB >= 3) {
     return {
       chosen: conflict.films[1].id,
       reason: `You marked "${conflict.films[1].title}" as ${formatInterestLevel(interestB)}`
