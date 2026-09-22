@@ -101,8 +101,8 @@ function precomputeData(films, screenings, interests, constraints, attendanceCon
       // Check time availability - enforce EACH constraint independently
       const dayAvail = availabilityByDate[s.date]
       if (dayAvail) {
-        const screeningStart = parseTimeToMinutes(s.startTime)
-        const screeningEnd = parseTimeToMinutes(getScreeningEndTime(s, film))
+        const screeningStart = getScreeningStartMinutes(s)
+        const screeningEnd = getScreeningEndMinutes(s, film)
         
         // Check 'from' constraint if present
         if (dayAvail.from) {
@@ -161,9 +161,9 @@ function enumerateDailySchedules(data, interests) {
   for (const [date, dayScreenings] of data.screeningsByDay.entries()) {
     console.log(`[OptimizerV3] Enumerating schedules for ${date} (${dayScreenings.length} screenings)...`)
     
-    // Sort screenings by start time for efficient enumeration
+    // Sort screenings by start time (use HH:MM minute arithmetic)
     const sorted = dayScreenings.slice().sort((a, b) => 
-      new Date(a.startTime) - new Date(b.startTime)
+      getScreeningStartMinutes(a) - getScreeningStartMinutes(b)
     )
 
     const schedules = []
@@ -185,16 +185,17 @@ function enumerateDailySchedules(data, interests) {
         // Skip if film already in schedule
         if (usedFilms.has(screening.filmId)) continue
 
-        // Check if this screening overlaps with any current screening
-        const screeningStart = new Date(screening.startTime).getTime()
-        const screeningEnd = new Date(getScreeningEndTime(screening, film)).getTime()
+        // Check if this screening overlaps with any current screening (HH:MM arithmetic)
+        const screeningStart = getScreeningStartMinutes(screening)
+        const screeningEnd = getScreeningEndMinutes(screening, film)
 
         let overlaps = false
         for (const existingScreening of current) {
           const existingFilm = data.filmMap.get(existingScreening.filmId)
-          const existingStart = new Date(existingScreening.startTime).getTime()
-          const existingEnd = new Date(getScreeningEndTime(existingScreening, existingFilm)).getTime()
+          const existingStart = getScreeningStartMinutes(existingScreening)
+          const existingEnd = getScreeningEndMinutes(existingScreening, existingFilm)
 
+          // Overlap if: screeningStart < existingEnd AND existingStart < screeningEnd
           if (screeningStart < existingEnd && existingStart < screeningEnd) {
             overlaps = true
             break
@@ -271,12 +272,14 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
   let bestSolution = null
   let bestScore = null
   let combinationsExplored = 0
+  let timedOut = false
 
   // Recursive combination search
   function combine(dayIndex, globalScreenings, globalFilms) {
     combinationsExplored++
 
     if (performance.now() >= deadline) {
+      timedOut = true
       return
     }
 
@@ -326,10 +329,11 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
   combine(0, lockedScreenings, lockedFilms)
 
   const elapsed = performance.now() - startTime
-  const optimalityProven = elapsed < timeBudgetMs
+  const optimalityProven = !timedOut
 
   console.log(`[OptimizerV3] Combinations explored: ${combinationsExplored}`)
   console.log(`[OptimizerV3] Best solution: ${bestSolution?.filmCount || 0} films`)
+  console.log(`[OptimizerV3] Timed out: ${timedOut}`)
   console.log(`[OptimizerV3] Optimality proven: ${optimalityProven}`)
 
   if (!bestSolution) {
@@ -418,30 +422,48 @@ function compareSolutionScores(a, b) {
 }
 
 /**
- * Helper: Get screening end time
+ * Helper: Parse time string to minutes since midnight
+ * Handles HH:MM format (production format)
  */
-function getScreeningEndTime(screening, film) {
-  if (screening.endTime) {
-    return screening.endTime
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0
+  
+  // Handle HH:MM format (production format)
+  if (typeof timeStr === 'string' && timeStr.includes(':')) {
+    const [hours, minutes] = timeStr.split(':').map(Number)
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      return hours * 60 + minutes
+    }
   }
-  const start = new Date(screening.startTime)
-  start.setMinutes(start.getMinutes() + film.runtime)
-  return start.toISOString()
+
+  return 0
 }
 
 /**
- * Helper: Parse time string to minutes since midnight
+ * Alias for compatibility with existing code
  */
 function parseTimeToMinutes(timeStr) {
-  if (!timeStr) return 0
-  
-  // Handle ISO format
-  const date = new Date(timeStr)
-  if (!isNaN(date.getTime())) {
-    return date.getHours() * 60 + date.getMinutes()
+  return timeToMinutes(timeStr)
+}
+
+/**
+ * Helper: Get screening start time in minutes since midnight
+ */
+function getScreeningStartMinutes(screening) {
+  return timeToMinutes(screening.startTime)
+}
+
+/**
+ * Helper: Get screening end time in minutes since midnight
+ */
+function getScreeningEndMinutes(screening, film) {
+  if (screening.endTime) {
+    return timeToMinutes(screening.endTime)
   }
-  
-  // Handle HH:MM format
-  const [hours, minutes] = timeStr.split(':').map(Number)
-  return hours * 60 + minutes
+  // Fallback: start + runtime
+  if (film && film.runtime) {
+    return timeToMinutes(screening.startTime) + film.runtime
+  }
+  // No runtime: use start time
+  return timeToMinutes(screening.startTime)
 }
