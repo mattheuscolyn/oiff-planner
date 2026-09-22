@@ -5,7 +5,7 @@ import { getFestivalDates, getDefaultAvailability } from '../utils/ferryData'
 const PlannerContext = createContext(null)
 
 const STORAGE_KEY = 'oiff-planner-state'
-const STATE_VERSION = '2' // Increment when state schema changes
+const STATE_VERSION = '3' // Incremented for optimizer V2 changes (PR #6)
 
 // Initialize default attendance days (all selected)
 function getDefaultAttendanceDays() {
@@ -68,15 +68,61 @@ export function PlannerProvider({ children }) {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        // Check version and migrate/reset if needed
+        
+        // Check version and migrate if needed
         if (parsed.version !== STATE_VERSION) {
-          console.log('Planner state version mismatch, resetting to defaults')
-          return DEFAULT_STATE
+          console.log(`Migrating planner state from v${parsed.version || 'unknown'} to v${STATE_VERSION}`)
+          
+          // Migrate safe fields, reset incompatible ones
+          const migrated = {
+            ...DEFAULT_STATE,
+            version: STATE_VERSION,
+            // Preserve attendance preferences if valid
+            attendance: parsed.attendance?.attendanceDays 
+              ? {
+                  ...DEFAULT_STATE.attendance,
+                  attendanceDays: parsed.attendance.attendanceDays,
+                  availabilityByDate: parsed.attendance.availabilityByDate || DEFAULT_STATE.attendance.availabilityByDate,
+                  arrivalTravel: parsed.attendance.arrivalTravel || DEFAULT_STATE.attendance.arrivalTravel,
+                  departureTravel: parsed.attendance.departureTravel || DEFAULT_STATE.attendance.departureTravel
+                }
+              : DEFAULT_STATE.attendance,
+            // Reset planner session state (incompatible with new optimizer)
+            generatedPlan: null,
+            currentStep: 'attendance', // Always start fresh after migration
+            hardDecisions: {},
+            constraints: {
+              ...DEFAULT_STATE.constraints,
+              // Clear stale locks/exclusions (may reference invalid IDs)
+              lockedScreenings: [],
+              excludedFilms: []
+            }
+          }
+          
+          return migrated
         }
-        return { ...DEFAULT_STATE, ...parsed }
+        
+        // Version matches, but validate state integrity
+        const validated = { ...DEFAULT_STATE, ...parsed }
+        
+        // Fix invalid state: plan step with no plan
+        if (validated.currentStep === 'plan' && !validated.generatedPlan) {
+          console.log('Recovering from invalid planner state (plan step with no generated plan)')
+          validated.currentStep = 'attendance'
+        }
+        
+        // Validate currentStep
+        const validSteps = ['attendance', 'decisions', 'plan']
+        if (!validSteps.includes(validated.currentStep)) {
+          console.log(`Invalid currentStep "${validated.currentStep}", resetting to attendance`)
+          validated.currentStep = 'attendance'
+        }
+        
+        return validated
       }
       return DEFAULT_STATE
-    } catch {
+    } catch (error) {
+      console.error('Error loading planner state:', error)
       return DEFAULT_STATE
     }
   })
@@ -123,6 +169,21 @@ export function PlannerProvider({ children }) {
     localStorage.removeItem(STORAGE_KEY)
   }, [])
 
+  const resetPlannerSession = useCallback(() => {
+    // Reset ONLY planner session state, NOT film ratings or My Plan
+    setState(prev => ({
+      ...prev,
+      generatedPlan: null,
+      currentStep: 'attendance',
+      hardDecisions: {},
+      constraints: {
+        ...DEFAULT_STATE.constraints,
+        lockedScreenings: [],
+        excludedFilms: []
+      }
+    }))
+  }, [])
+
   const value = {
     ...state,
     setObjective,
@@ -131,7 +192,8 @@ export function PlannerProvider({ children }) {
     updateHardDecisions,
     setGeneratedPlan,
     setCurrentStep,
-    resetPlanner
+    resetPlanner,
+    resetPlannerSession
   }
 
   return (
