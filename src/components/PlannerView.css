@@ -88,6 +88,76 @@
   cursor: not-allowed;
 }
 
+.progress-container {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f7f9fa;
+  border-radius: 6px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e1e8ed;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3498db, #2ecc71);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.8;
+  }
+}
+
+.progress-text {
+  text-align: center;
+  font-size: 0.875rem;
+  color: #5a6c7d;
+  font-weight: 500;
+}
+
+.recomputing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.recomputing-overlay .progress-container {
+  max-width: 400px;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e1e8ed;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.planner-results.recomputing {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .planner-results {
   display: flex;
   flex-direction: column;
