@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { films, screenings } from '../utils/festivalData'
 import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
-import { generatePlanV2 } from '../planner/optimizerV2'
+import { generatePlanV3 } from '../planner/optimizerV3'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import DecisionsStep from './DecisionsStep'
@@ -54,7 +54,7 @@ function PlannerViewInner() {
     // Use setTimeout to allow UI to update
     setTimeout(() => {
       try {
-        const plan = generatePlanV2({
+        const plan = generatePlanV3({
           films,
           screenings,
           interests,
@@ -122,7 +122,7 @@ function PlannerViewInner() {
     
     setTimeout(() => {
       try {
-        const plan = generatePlanV2({
+        const plan = generatePlanV3({
           films,
           screenings,
           interests,
@@ -167,7 +167,7 @@ function PlannerViewInner() {
     
     setTimeout(() => {
       try {
-        const plan = generatePlanV2({
+        const plan = generatePlanV3({
           films,
           screenings,
           interests,
