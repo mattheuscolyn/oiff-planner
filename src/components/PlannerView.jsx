@@ -337,7 +337,7 @@ function renderPlanByDay(planScreenings, onExclude, onLock, onUnlock, constraint
             return (
               <div key={screening.id} className="plan-screening">
                 <div className="screening-time">
-                  <strong>{formatTime(screening.time)}</strong>
+                  <strong>{formatTime(screening.startTime)}</strong>
                   <span className="venue">{screening.venue}</span>
                 </div>
                 <div className="screening-film">

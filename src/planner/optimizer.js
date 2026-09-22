@@ -184,7 +184,7 @@ function isScreeningFeasibleForAttendance(screening, film, attendanceConstraints
         return hours * 60 + minutes
       }
       
-      const screeningStart = parseTime(screening.time)
+      const screeningStart = parseTime(screening.startTime)
       const screeningEnd = parseTime(getScreeningEndTime(screening, film))
       const availableFrom = parseTime(from)
       const availableUntil = parseTime(until)

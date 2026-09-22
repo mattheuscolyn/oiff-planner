@@ -35,7 +35,7 @@ export function isScreeningFeasible(screening, film, attendanceConstraints) {
   }
   
   // Parse times as minutes since midnight
-  const screeningStart = parseTimeToMinutes(screening.time)
+  const screeningStart = parseTimeToMinutes(screening.startTime)
   const screeningEnd = parseTimeToMinutes(getScreeningEndTime(screening, film))
   const availableFrom = parseTimeToMinutes(from)
   const availableUntil = parseTimeToMinutes(until)
