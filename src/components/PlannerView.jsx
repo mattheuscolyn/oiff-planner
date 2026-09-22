@@ -125,8 +125,8 @@ function PlannerViewInner() {
           interests,
           constraints: { ...constraints, excludedFilms: newExcluded },
           attendanceConstraints: {
-            attendanceDays: attendance.attendanceDays,
-            availabilityByDate: attendance.availabilityByDate
+            attendanceDays,
+            availabilityByDate
           },
           
           timeBudgetMs: 750
