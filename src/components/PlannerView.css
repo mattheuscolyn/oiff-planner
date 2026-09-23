@@ -292,11 +292,15 @@
   display: grid;
   grid-template-columns: auto auto 1fr auto;
   gap: 0.75rem;
-  align-items: center;
+  align-items: start;
   padding: 0.75rem;
   background: #fff;
   border: 1px solid #e1e8ed;
   border-radius: 6px;
+}
+
+.plan-screening .slot-options {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 640px) {
@@ -305,13 +309,15 @@
     grid-template-areas:
       "poster film"
       "time time"
-      "actions actions";
+      "actions actions"
+      "slots slots";
   }
 
   .plan-screening-poster { grid-area: poster; }
   .plan-screening .screening-time { grid-area: time; }
   .plan-screening .screening-film { grid-area: film; }
   .plan-screening .screening-actions { grid-area: actions; justify-content: flex-start; }
+  .plan-screening .slot-options { grid-area: slots; }
 }
 
 .plan-screening .screening-time {
@@ -550,6 +556,12 @@
 }
 
 .alternatives-section,
+.omission-slot-hint {
+  font-size: 0.8rem;
+  color: #2b6cb0;
+  margin-top: 0.25rem;
+}
+
 .omitted-section {
   margin-top: 2rem;
   padding-top: 1.25rem;
