@@ -174,3 +174,17 @@ export function getFerryById(id, ferryList) {
   const list = ferryList || getFerries()
   return list.find(f => f.id === id)
 }
+
+/**
+ * Keep ferryId only if it is valid for the new date + route.
+ * Used when arrival/departure date changes.
+ * @returns {string|null} ferryId to keep, or null if cleared
+ */
+export function resolveFerryIdForDateChange(ferryId, newDate, route, ferryList) {
+  if (!ferryId) return null
+  const list = ferryList || getFerries()
+  const stillValid = list.some(
+    f => f.id === ferryId && f.date === newDate && f.route === route
+  )
+  return stillValid ? ferryId : null
+}

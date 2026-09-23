@@ -6,7 +6,7 @@
  */
 
 import { usePlanner } from '../contexts/PlannerContext'
-import { getFerries } from '../utils/ferryData'
+import { getFerries, resolveFerryIdForDateChange } from '../utils/ferryData'
 import { formatAvailabilitySummary } from '../utils/festivalAvailability'
 import './AttendanceStep.css'
 
@@ -62,12 +62,15 @@ export default function AttendanceStep({ onContinue }) {
             value={arrival.date}
             onChange={(e) => {
               const newDate = e.target.value
-              // Clear ferry if date changes
-              const updates = { date: newDate }
-              if (arrival.ferryId && !arrivalFerries.some(f => f.id === arrival.ferryId)) {
-                updates.ferryId = null
-              }
-              updateArrival(updates)
+              updateArrival({
+                date: newDate,
+                ferryId: resolveFerryIdForDateChange(
+                  arrival.ferryId,
+                  newDate,
+                  'anacortes-orcas',
+                  ferries
+                )
+              })
             }}
           >
             {ARRIVAL_DATES.map(d => (
@@ -160,12 +163,15 @@ export default function AttendanceStep({ onContinue }) {
             value={departure.date}
             onChange={(e) => {
               const newDate = e.target.value
-              // Clear ferry if date changes
-              const updates = { date: newDate }
-              if (departure.ferryId && !departureFerries.some(f => f.id === departure.ferryId)) {
-                updates.ferryId = null
-              }
-              updateDeparture(updates)
+              updateDeparture({
+                date: newDate,
+                ferryId: resolveFerryIdForDateChange(
+                  departure.ferryId,
+                  newDate,
+                  'orcas-anacortes',
+                  ferries
+                )
+              })
             }}
           >
             {DEPARTURE_DATES.map(d => (

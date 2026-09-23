@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { films, screenings } from '../utils/festivalData'
 import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
-import { generatePlanV3 } from '../planner/optimizerV3'
+import { generateCurrentPlan, appendUniqueId } from '../planner/generateCurrentPlan'
 import { setSelectedScreenings } from '../utils/userState'
-import { deriveFestivalAvailability } from '../utils/festivalAvailability'
-import { getFerries } from '../utils/ferryData'
 import AttendanceStep from './AttendanceStep'
 import ErrorBoundary from './ErrorBoundary'
 import './PlannerView.css'
@@ -27,61 +25,45 @@ function PlannerViewInner() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
   const [generationError, setGenerationError] = useState(null)
-  
-  const handleBuildPlan = () => {
-    setShowingResults(true)
-    handleGenerate()
-  }
-  
-  const handleGenerate = () => {
+
+  const runPlanGeneration = (constraintOverrides = {}) => {
     setIsGenerating(true)
     setProgress(0)
     setGenerationError(null)
-    
+
     const progressInterval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 90) return prev
         return prev + Math.random() * 15
       })
     }, 100)
-    
-    // Use setTimeout to allow UI to update
+
     setTimeout(() => {
       try {
-        // Derive attendance from arrival/departure
-        const ferries = getFerries()
-        const { attendanceDays, availabilityByDate } = deriveFestivalAvailability(arrival, departure, ferries)
-        
-        const plan = generatePlanV3({
+        const plan = generateCurrentPlan({
           films,
           screenings,
           interests,
           constraints,
-          attendanceConstraints: {
-            attendanceDays,
-            availabilityByDate
-          },
-          timeBudgetMs: 750 // 750ms budget for mobile
+          arrival,
+          departure,
+          constraintOverrides,
+          timeBudgetMs: 750
         })
-        
+
         clearInterval(progressInterval)
         setProgress(100)
-        
+
         setTimeout(() => {
           setGeneratedPlan(plan)
           setIsGenerating(false)
           setProgress(0)
-          
-          // Development-only performance logging
+
           if (import.meta.env.DEV && plan.metadata) {
             console.log('=== Plan Generation Performance ===')
-            console.log('Candidate films:', plan.metadata.candidateFilms)
-            console.log('Candidate screenings:', plan.metadata.candidateScreenings)
-            console.log('Greedy solution time:', plan.metadata.greedyMs?.toFixed(1), 'ms')
-            console.log('Initial solution size:', plan.metadata.initialSolutionSize)
-            console.log('Search nodes explored:', plan.metadata.nodesExplored)
-            console.log('Branches pruned:', plan.metadata.nodesPruned)
-            console.log('Total optimization time:', plan.metadata.totalMs?.toFixed(1), 'ms')
+            console.log('Max distinct films:', plan.metadata.maxDistinctFilms)
+            console.log('Combinations explored:', plan.metadata.combinationsExplored)
+            console.log('Elapsed:', plan.metadata.elapsedMs?.toFixed(1), 'ms')
             console.log('Optimality proven:', plan.metadata.optimalityProven)
             console.log('===================================')
           }
@@ -96,6 +78,15 @@ function PlannerViewInner() {
     }, 50)
   }
   
+  const handleBuildPlan = () => {
+    setShowingResults(true)
+    runPlanGeneration()
+  }
+  
+  const handleGenerate = () => {
+    runPlanGeneration()
+  }
+  
   const handleUsePlan = () => {
     if (!generatedPlan || !generatedPlan.screenings) return
     
@@ -106,105 +97,21 @@ function PlannerViewInner() {
   }
   
   const handleExcludeFilm = (filmId) => {
-    setIsGenerating(true)
-    setProgress(0)
-    setGenerationError(null)
-    
-    const newExcluded = [...constraints.excludedFilms, filmId]
+    const newExcluded = appendUniqueId(constraints.excludedFilms, filmId)
     updateConstraints({ excludedFilms: newExcluded })
-    
-    const progressInterval = setInterval(() => {
-      setProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 20))
-    }, 80)
-    
-    setTimeout(() => {
-      try {
-        const plan = generatePlanV3({
-          films,
-          screenings,
-          interests,
-          constraints: { ...constraints, excludedFilms: newExcluded },
-          attendanceConstraints: {
-            attendanceDays,
-            availabilityByDate
-          },
-          
-          timeBudgetMs: 750
-        })
-        
-        clearInterval(progressInterval)
-        setProgress(100)
-        
-        setTimeout(() => {
-          setGeneratedPlan(plan)
-          setIsGenerating(false)
-          setProgress(0)
-        }, 200)
-      } catch (error) {
-        console.error('Plan regeneration failed:', error)
-        clearInterval(progressInterval)
-        setIsGenerating(false)
-        setProgress(0)
-        setGenerationError(error.message || 'An unexpected error occurred')
-      }
-    }, 50)
+    runPlanGeneration({ excludedFilms: newExcluded })
   }
   
   const handleLockScreening = (screeningId) => {
-    setIsGenerating(true)
-    setProgress(0)
-    setGenerationError(null)
-    
-    const newLocked = [...constraints.lockedScreenings, screeningId]
+    const newLocked = appendUniqueId(constraints.lockedScreenings, screeningId)
     updateConstraints({ lockedScreenings: newLocked })
-    
-    const progressInterval = setInterval(() => {
-      setProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 20))
-    }, 80)
-    
-    setTimeout(() => {
-      try {
-        const plan = generatePlanV3({
-          films,
-          screenings,
-          interests,
-          constraints: { ...constraints, lockedScreenings: newLocked },
-          attendanceConstraints: {
-            attendanceDays,
-            availabilityByDate
-          },
-          
-          timeBudgetMs: 750
-        })
-        
-        clearInterval(progressInterval)
-        setProgress(100)
-        
-        setTimeout(() => {
-          setGeneratedPlan(plan)
-          setIsGenerating(false)
-          setProgress(0)
-        }, 200)
-      } catch (error) {
-        console.error('Plan regeneration failed:', error)
-        clearInterval(progressInterval)
-        setIsGenerating(false)
-        setProgress(0)
-        setGenerationError(error.message || 'An unexpected error occurred')
-      }
-    }, 50)
+    runPlanGeneration({ lockedScreenings: newLocked })
   }
   
   const handleUnlockScreening = (screeningId) => {
-    const newLocked = constraints.lockedScreenings.filter(id => id !== screeningId)
+    const newLocked = (constraints.lockedScreenings || []).filter(id => id !== screeningId)
     updateConstraints({ lockedScreenings: newLocked })
-    
-    // Trigger regeneration
-    handleLockScreening(screeningId)
-    // Then immediately unlock it
-    setTimeout(() => {
-      updateConstraints({ lockedScreenings: newLocked })
-    }, 50)
+    runPlanGeneration({ lockedScreenings: newLocked })
   }
   
   const handleStartOver = () => {
