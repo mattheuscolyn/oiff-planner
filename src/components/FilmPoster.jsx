@@ -1,31 +1,53 @@
 import { useState } from 'react'
-import { resolveFilmPoster } from '../utils/tmdbPosters'
+import { getPosterCandidates } from '../utils/tmdbPosters'
 import './FilmPoster.css'
 
 /**
  * Shared film poster with TMDB → Eventive → placeholder fallback.
+ * Runtime image-load failures advance through the candidate chain.
  */
 function FilmPoster({ film, size = 'card', className = '', lazy = true }) {
-  const resolved = resolveFilmPoster(film, size)
-  const [failed, setFailed] = useState(false)
+  const candidates = getPosterCandidates(film, size)
+  const sourceKey = `${film?.id ?? ''}|${size}|${film?.poster ?? ''}|${film?.tmdb?.posterPath ?? ''}`
 
-  const showPlaceholder = !resolved.url || failed
+  const [candidateIndex, setCandidateIndex] = useState(0)
+  const [activeKey, setActiveKey] = useState(sourceKey)
+
+  // Reset candidate index when the film/size/source identity changes
+  // (render-time adjust — avoids leaking failed state across films).
+  if (activeKey !== sourceKey) {
+    setActiveKey(sourceKey)
+    setCandidateIndex(0)
+  }
+
+  const index = activeKey === sourceKey ? candidateIndex : 0
+  const active = candidates[index] || null
+  const showPlaceholder = !active
+  const alt = film?.title
+    ? showPlaceholder
+      ? `${film.title} — no poster available`
+      : `${film.title} poster`
+    : 'Film poster unavailable'
+
+  const sourceClass = showPlaceholder ? 'placeholder' : active.source
 
   return (
     <div
-      className={`film-poster film-poster--${size} source-${showPlaceholder ? 'placeholder' : resolved.source} ${className}`.trim()}
-      aria-hidden={showPlaceholder ? undefined : undefined}
+      className={`film-poster film-poster--${size} source-${sourceClass} ${className}`.trim()}
     >
       {!showPlaceholder ? (
         <img
-          src={resolved.url}
-          alt={resolved.alt}
+          key={`${sourceKey}-${active.source}-${index}`}
+          src={active.url}
+          alt={alt}
           loading={lazy ? 'lazy' : 'eager'}
           decoding="async"
-          onError={() => setFailed(true)}
+          onError={() => {
+            setCandidateIndex(i => i + 1)
+          }}
         />
       ) : (
-        <div className="film-poster-placeholder" role="img" aria-label={resolved.alt}>
+        <div className="film-poster-placeholder" role="img" aria-label={alt}>
           <span className="film-poster-placeholder-title">{film?.title || 'No poster'}</span>
         </div>
       )}

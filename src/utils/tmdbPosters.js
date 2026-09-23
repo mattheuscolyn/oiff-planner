@@ -31,7 +31,28 @@ export function getTmdbRecord(filmId) {
 }
 
 /**
- * Canonical poster resolution for a film object.
+ * Build ordered poster URL candidates: TMDB → Eventive.
+ * Empty array means placeholder.
+ */
+export function getPosterCandidates(film, size = 'card') {
+  if (!film) return []
+  const candidates = []
+  const record = getTmdbRecord(film.id)
+  const tmdbUrl = tmdbPosterUrl(record?.posterPath, size)
+  if (tmdbUrl) {
+    candidates.push({ url: tmdbUrl, source: 'tmdb' })
+  }
+  if (film.poster) {
+    // Avoid duplicating the same URL if Eventive somehow matched TMDB
+    if (!candidates.some(c => c.url === film.poster)) {
+      candidates.push({ url: film.poster, source: 'eventive' })
+    }
+  }
+  return candidates
+}
+
+/**
+ * Canonical poster resolution for a film object (first available candidate).
  * Priority: TMDB → Eventive film.poster → null (placeholder)
  */
 export function resolveFilmPoster(film, size = 'card') {
@@ -39,29 +60,23 @@ export function resolveFilmPoster(film, size = 'card') {
     return { url: null, source: 'placeholder', alt: 'Film poster unavailable' }
   }
 
+  const candidates = getPosterCandidates(film, size)
+  const alt = candidates.length
+    ? `${film.title} poster`
+    : `${film.title} — no poster available`
+
+  if (candidates.length === 0) {
+    return { url: null, source: 'placeholder', alt }
+  }
+
+  const first = candidates[0]
   const record = getTmdbRecord(film.id)
-  const tmdbUrl = tmdbPosterUrl(record?.posterPath, size)
-  if (tmdbUrl) {
-    return {
-      url: tmdbUrl,
-      source: 'tmdb',
-      alt: `${film.title} poster`,
-      tmdbId: record.tmdbId
-    }
-  }
-
-  if (film.poster) {
-    return {
-      url: film.poster,
-      source: 'eventive',
-      alt: `${film.title} poster`
-    }
-  }
-
   return {
-    url: null,
-    source: 'placeholder',
-    alt: `${film.title} — no poster available`
+    url: first.url,
+    source: first.source,
+    alt,
+    tmdbId: record?.tmdbId,
+    candidates
   }
 }
 
