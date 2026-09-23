@@ -50,10 +50,12 @@ describe('Planner State Migration - Decisions Removal', () => {
 
     // Verify migration
     const migrated = JSON.parse(localStorage.getItem('oiff-planner-state'))
-    expect(migrated.version).toBe('4')
+    expect(migrated.version).toBe('5')
     expect(migrated.hardDecisions).toBeUndefined()
     expect(migrated.generatedPlan).toBeNull()
-    expect(migrated.attendance.attendanceDays['2026-10-14']).toBe(true)
+    expect(migrated.arrival).toBeDefined()
+    expect(migrated.departure).toBeDefined()
+    expect(migrated.attendance).toBeUndefined()
 
     unmount()
   })
@@ -122,12 +124,13 @@ describe('Planner State Migration - Decisions Removal', () => {
 
     const migrated = JSON.parse(localStorage.getItem('oiff-planner-state'))
     
-    expect(migrated.version).toBe('4')
+    expect(migrated.version).toBe('5')
     expect(migrated.hardDecisions).toBeUndefined()
-    expect(migrated.attendance.attendanceDays['2026-10-14']).toBe(true)
-    expect(migrated.attendance.attendanceDays['2026-10-15']).toBe(true)
-    expect(migrated.attendance.attendanceDays['2026-10-16']).toBe(false)
-    expect(migrated.attendance.arrivalTravel.type).toBe('ferry')
+    // v5 replaces per-day attendance with arrival/departure (travel prefs carried forward)
+    expect(migrated.attendance).toBeUndefined()
+    expect(migrated.arrival.type).toBe('ferry')
+    expect(migrated.arrival.ferryId).toBe('f123')
+    expect(migrated.departure.type).toBe('staying-on-island')
 
     unmount()
   })

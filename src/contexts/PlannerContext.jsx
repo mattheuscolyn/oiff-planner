@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { OBJECTIVES } from '../planner/scoring'
-import { getFestivalDates, getDefaultAvailability } from '../utils/ferryData'
 
 const PlannerContext = createContext(null)
 
@@ -90,23 +89,13 @@ export function PlannerProvider({ children }) {
           return migrated
         }
         
-        // Version matches, but validate state integrity
-        const validated = { ...DEFAULT_STATE, ...parsed }
-        
-        // Fix invalid state: plan step with no plan
-        if (validated.currentStep === 'plan' && !validated.generatedPlan) {
-          console.log('Recovering from invalid planner state (plan step with no generated plan)')
-          validated.currentStep = 'attendance'
-        }
-        
-        // Validate currentStep
-        const validSteps = ['attendance', 'decisions', 'plan']
-        if (!validSteps.includes(validated.currentStep)) {
-          console.log(`Invalid currentStep "${validated.currentStep}", resetting to attendance`)
-          validated.currentStep = 'attendance'
-        }
-        
-        return validated
+        // Version matches — strip any obsolete wizard fields from older clients
+        const cleaned = { ...parsed }
+        delete cleaned.currentStep
+        delete cleaned.hardDecisions
+        delete cleaned.decisions
+
+        return { ...DEFAULT_STATE, ...cleaned, version: STATE_VERSION }
       }
       return DEFAULT_STATE
     } catch (error) {
@@ -148,8 +137,6 @@ export function PlannerProvider({ children }) {
     setState(prev => ({ ...prev, generatedPlan: plan }))
   }, [])
 
-  // currentStep removed - no more wizard flow
-
   const resetPlanner = useCallback(() => {
     setState(DEFAULT_STATE)
     localStorage.removeItem(STORAGE_KEY)
@@ -160,8 +147,6 @@ export function PlannerProvider({ children }) {
     setState(prev => ({
       ...prev,
       generatedPlan: null,
-      currentStep: 'attendance',
-      hardDecisions: {},
       constraints: {
         ...DEFAULT_STATE.constraints,
         lockedScreenings: [],
