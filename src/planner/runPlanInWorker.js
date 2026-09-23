@@ -1,5 +1,8 @@
 /**
  * Run generatePlanV3 in a Web Worker so React can repaint progress.
+ *
+ * One Worker per request: abort/result/error always terminate that worker
+ * so a replacement search is not queued behind an obsolete optimizer run.
  */
 
 import { deriveFestivalAvailability } from '../utils/festivalAvailability'
@@ -7,15 +10,21 @@ import { getFerries } from '../utils/ferryData'
 import { DEFAULT_TIME_BUDGET_MS } from './optimizerV3'
 
 let nextRequestId = 1
-let sharedWorker = null
 
-function getWorker() {
-  if (!sharedWorker) {
-    sharedWorker = new Worker(new URL('./optimizerWorker.js', import.meta.url), {
-      type: 'module'
-    })
-  }
-  return sharedWorker
+/** @type {null | (() => Worker)} */
+let workerFactoryOverride = null
+
+/** Test hook — inject a Worker factory without touching the optimizer. */
+export function __setWorkerFactoryForTests(factory) {
+  workerFactoryOverride = factory
+}
+
+function createRequestWorker() {
+  if (workerFactoryOverride) return workerFactoryOverride()
+  // Vite requires this literal `new Worker(new URL(...))` pattern to emit the worker chunk.
+  return new Worker(new URL('./optimizerWorker.js', import.meta.url), {
+    type: 'module'
+  })
 }
 
 /**
@@ -47,13 +56,22 @@ export function generateCurrentPlanAsync({
   delete mergedConstraints.lockedScreenings
 
   const requestId = nextRequestId++
-  const worker = getWorker()
+  const worker = createRequestWorker()
 
   return new Promise((resolve, reject) => {
+    let settled = false
+
     const cleanup = () => {
+      if (settled) return
+      settled = true
       worker.removeEventListener('message', onMessage)
       worker.removeEventListener('error', onError)
       if (signal) signal.removeEventListener('abort', onAbort)
+      try {
+        worker.terminate()
+      } catch {
+        // ignore double-terminate
+      }
     }
 
     const onAbort = () => {
@@ -89,6 +107,7 @@ export function generateCurrentPlanAsync({
 
     worker.addEventListener('message', onMessage)
     worker.addEventListener('error', onError)
+
     if (signal) {
       if (signal.aborted) {
         onAbort()
