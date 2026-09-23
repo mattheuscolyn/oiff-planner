@@ -11,6 +11,7 @@ import { generateCurrentPlan, appendUniqueId } from '../generateCurrentPlan'
 import * as optimizerV3 from '../optimizerV3'
 import { films, screenings } from '../../utils/festivalData'
 import { getFerries, resolveFerryIdForDateChange } from '../../utils/ferryData'
+import { validatePlan } from '../../utils/planValidator'
 import { PlannerProvider, usePlanner } from '../../contexts/PlannerContext'
 import { UserStateProvider } from '../../contexts/UserStateContext'
 import {
@@ -154,6 +155,10 @@ describe('generateCurrentPlan shared path', () => {
 
     expect(regenerated.infeasible).toBe(false)
     expect(regenerated.screenings.some(s => s.id === screeningId)).toBe(true)
+
+    // Locked itinerary must be independently conflict-free
+    const validation = validatePlan(regenerated, films, screenings)
+    expect(validation.valid, validation.errors.join('\n')).toBe(true)
   }, 60000)
 
   it('Unlock regenerates only once with the lock removed', () => {
@@ -311,8 +316,8 @@ describe('resetPlannerSession cleanliness', () => {
   })
 })
 
-describe('Benchmark regressions via shared path', () => {
-  it('24-film unrestricted benchmark still passes', { timeout: 60000 }, () => {
+describe('Benchmark regressions (shared path + direct V3)', () => {
+  it('24-film unrestricted benchmark still passes via generateCurrentPlan', { timeout: 60000 }, () => {
     const result = generateCurrentPlan({
       films,
       screenings,
@@ -326,10 +331,9 @@ describe('Benchmark regressions via shared path', () => {
     expect(result.filmCount).toBe(24)
   })
 
-  it('23-film restricted benchmark still passes', { timeout: 60000 }, () => {
-    // Shared path always derives from arrival/departure; for the 09:00–23:00
-    // benchmark we call V3 directly (same as existing benchmark suite) to keep
-    // that exact constraint surface, then assert the known maximum.
+  it('23-film restricted 09:00–23:00 benchmark still passes via generatePlanV3', { timeout: 60000 }, () => {
+    // Restricted windows are not expressible via arrival/departure alone;
+    // call V3 directly to preserve the exact benchmark constraint surface.
     const result = optimizerV3.generatePlanV3({
       films,
       screenings,

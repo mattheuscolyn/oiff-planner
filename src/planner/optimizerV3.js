@@ -159,10 +159,17 @@ function enumerateDailySchedules(data, interests) {
   const dailySchedules = new Map()
 
   for (const [date, dayScreenings] of data.screeningsByDay.entries()) {
-    console.log(`[OptimizerV3] Enumerating schedules for ${date} (${dayScreenings.length} screenings)...`)
+    // Locked screenings are seeded into the global solution separately.
+    // Exclude them here so companion-only schedules are not pruned as
+    // "dominated" by schedules that also contain the locked film.
+    const unlockedScreenings = dayScreenings.filter(
+      s => !data.lockedScreeningSet.has(s.id)
+    )
+
+    console.log(`[OptimizerV3] Enumerating schedules for ${date} (${unlockedScreenings.length} screenings)...`)
     
     // Sort screenings by start time (use HH:MM minute arithmetic)
-    const sorted = dayScreenings.slice().sort((a, b) => 
+    const sorted = unlockedScreenings.slice().sort((a, b) => 
       getScreeningStartMinutes(a) - getScreeningStartMinutes(b)
     )
 
@@ -186,17 +193,10 @@ function enumerateDailySchedules(data, interests) {
         if (usedFilms.has(screening.filmId)) continue
 
         // Check if this screening overlaps with any current screening (HH:MM arithmetic)
-        const screeningStart = getScreeningStartMinutes(screening)
-        const screeningEnd = getScreeningEndMinutes(screening, film)
-
         let overlaps = false
         for (const existingScreening of current) {
           const existingFilm = data.filmMap.get(existingScreening.filmId)
-          const existingStart = getScreeningStartMinutes(existingScreening)
-          const existingEnd = getScreeningEndMinutes(existingScreening, existingFilm)
-
-          // Overlap if: screeningStart < existingEnd AND existingStart < screeningEnd
-          if (screeningStart < existingEnd && existingStart < screeningEnd) {
+          if (screeningsOverlapMinutes(screening, existingScreening, film, existingFilm)) {
             overlaps = true
             break
           }
@@ -215,8 +215,11 @@ function enumerateDailySchedules(data, interests) {
 
     enumerate(0, [], new Set())
 
-    // Prune dominated schedules
-    const pruned = pruneDominatedSchedules(schedules, data, interests)
+    // Prune dominated schedules (lock-aware: lock-conflicting schedules cannot dominate)
+    const lockedScreenings = Array.from(data.lockedScreeningSet)
+      .map(id => data.screeningMap.get(id))
+      .filter(Boolean)
+    const pruned = pruneDominatedSchedules(schedules, lockedScreenings, data.filmMap)
     
     console.log(`[OptimizerV3]   ${schedules.length} schedules found, ${pruned.length} after pruning`)
     dailySchedules.set(date, pruned)
@@ -226,10 +229,11 @@ function enumerateDailySchedules(data, interests) {
 }
 
 /**
- * Prune schedules that are strictly dominated
- * Schedule A dominates B if A contains all of B's films plus more
+ * Prune schedules that are strictly dominated.
+ * When locks exist, a schedule that overlaps a lock must not dominate
+ * lock-compatible companions (otherwise locking would drop valid films).
  */
-function pruneDominatedSchedules(schedules, data, interests) {
+function pruneDominatedSchedules(schedules, lockedScreenings = [], filmMap = new Map()) {
   const nonDominated = []
 
   for (const schedule of schedules) {
@@ -237,6 +241,11 @@ function pruneDominatedSchedules(schedules, data, interests) {
 
     for (const other of schedules) {
       if (schedule === other) continue
+
+      // Lock-conflicting schedules cannot act as dominators
+      if (scheduleConflictsWithLocks(other, lockedScreenings, filmMap)) {
+        continue
+      }
 
       // Check if 'other' dominates 'schedule'
       if (other.filmCount > schedule.filmCount) {
@@ -257,6 +266,22 @@ function pruneDominatedSchedules(schedules, data, interests) {
   return nonDominated
 }
 
+function scheduleConflictsWithLocks(schedule, lockedScreenings, filmMap) {
+  if (!lockedScreenings.length) return false
+
+  for (const screening of schedule.screenings) {
+    const film = filmMap.get(screening.filmId)
+    for (const locked of lockedScreenings) {
+      if (screening.filmId === locked.filmId) return true
+      const lockedFilm = filmMap.get(locked.filmId)
+      if (screeningsOverlapMinutes(screening, locked, film, lockedFilm)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 /**
  * Find optimal global combination across all days
  */
@@ -268,6 +293,27 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
   
   console.log(`[OptimizerV3] Finding optimal global combination...`)
   console.log(`[OptimizerV3] Days to combine: ${days.length}`)
+
+  // Resolve locked screenings as hard constraints from the full screening map
+  const lockedResult = resolveLockedScreenings(data)
+  if (lockedResult.infeasible) {
+    return {
+      screenings: [],
+      interestCounts: {},
+      filmCount: 0,
+      infeasible: true,
+      reason: lockedResult.reason,
+      metadata: {
+        maxDistinctFilms: 0,
+        optimalityProven: true,
+        combinationsExplored: 0,
+        elapsedMs: performance.now() - startTime
+      }
+    }
+  }
+
+  const lockedScreenings = lockedResult.lockedScreenings
+  const lockedFilms = new Set(lockedScreenings.map(s => s.filmId))
 
   let bestSolution = null
   let bestScore = null
@@ -300,31 +346,20 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
 
     // Try each daily schedule for this day
     for (const daySchedule of daySchedules) {
-      // Check if any films conflict with already selected films
-      let hasConflict = false
-      for (const filmId of daySchedule.films) {
-        if (globalFilms.has(filmId)) {
-          hasConflict = true
-          break
-        }
+      if (dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, data.filmMap)) {
+        continue
       }
 
-      if (!hasConflict) {
-        // Add this day's schedule
-        const newScreenings = [...globalScreenings, ...daySchedule.screenings]
-        const newFilms = new Set([...globalFilms, ...daySchedule.films])
+      // Add this day's schedule
+      const newScreenings = [...globalScreenings, ...daySchedule.screenings]
+      const newFilms = new Set([...globalFilms, ...daySchedule.films])
 
-        combine(dayIndex + 1, newScreenings, newFilms)
-      }
+      combine(dayIndex + 1, newScreenings, newFilms)
     }
 
     // Also try skipping this day entirely
     combine(dayIndex + 1, globalScreenings, globalFilms)
   }
-
-  // Handle locked screenings
-  const lockedScreenings = data.candidateScreenings.filter(s => data.lockedScreeningSet.has(s.id))
-  const lockedFilms = new Set(lockedScreenings.map(s => s.filmId))
 
   combine(0, lockedScreenings, lockedFilms)
 
@@ -338,11 +373,13 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
 
   if (!bestSolution) {
     return {
-      screenings: lockedScreenings,
+      screenings: [],
       interestCounts: {},
-      filmCount: lockedFilms.size,
-      infeasible: lockedScreenings.length === 0,
-      reason: 'No valid schedule found',
+      filmCount: 0,
+      infeasible: true,
+      reason: lockedScreenings.length > 0
+        ? 'No valid schedule found that respects locked screenings'
+        : 'No valid schedule found',
       metadata: {
         maxDistinctFilms: 0,
         optimalityProven: false,
@@ -367,6 +404,97 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
       elapsedMs: elapsed
     }
   }
+}
+
+/**
+ * Resolve locked screening IDs into objects and reject incompatible lock sets.
+ */
+function resolveLockedScreenings(data) {
+  const lockedIds = Array.from(data.lockedScreeningSet)
+  if (lockedIds.length === 0) {
+    return { infeasible: false, lockedScreenings: [] }
+  }
+
+  const lockedScreenings = []
+  const missing = []
+
+  for (const id of lockedIds) {
+    const screening = data.screeningMap.get(id)
+    if (!screening) {
+      missing.push(id)
+    } else {
+      lockedScreenings.push(screening)
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      infeasible: true,
+      reason: `Locked screening(s) not found: ${missing.join(', ')}`
+    }
+  }
+
+  // Mutually incompatible locks → explicit infeasible (never return an invalid plan)
+  for (let i = 0; i < lockedScreenings.length; i++) {
+    for (let j = i + 1; j < lockedScreenings.length; j++) {
+      const a = lockedScreenings[i]
+      const b = lockedScreenings[j]
+
+      if (a.filmId === b.filmId) {
+        return {
+          infeasible: true,
+          reason: `Locked screenings conflict: same film locked twice (${a.filmId})`
+        }
+      }
+
+      const filmA = data.filmMap.get(a.filmId)
+      const filmB = data.filmMap.get(b.filmId)
+      if (screeningsOverlapMinutes(a, b, filmA, filmB)) {
+        return {
+          infeasible: true,
+          reason: `Locked screenings conflict: ${a.id} overlaps ${b.id}`
+        }
+      }
+    }
+  }
+
+  return { infeasible: false, lockedScreenings }
+}
+
+/**
+ * True if a candidate day schedule conflicts with the current global selection
+ * via duplicate films OR temporal screening overlap (including locked seeds).
+ */
+function dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, filmMap) {
+  for (const filmId of daySchedule.films) {
+    if (globalFilms.has(filmId)) return true
+  }
+
+  for (const screening of daySchedule.screenings) {
+    const film = filmMap.get(screening.filmId)
+    for (const existing of globalScreenings) {
+      const existingFilm = filmMap.get(existing.filmId)
+      if (screeningsOverlapMinutes(screening, existing, film, existingFilm)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+/**
+ * Same-day temporal overlap using HH:MM minute arithmetic (no Date parsing).
+ */
+function screeningsOverlapMinutes(s1, s2, film1, film2) {
+  if (s1.date !== s2.date) return false
+
+  const start1 = getScreeningStartMinutes(s1)
+  const end1 = getScreeningEndMinutes(s1, film1)
+  const start2 = getScreeningStartMinutes(s2)
+  const end2 = getScreeningEndMinutes(s2, film2)
+
+  return start1 < end2 && start2 < end1
 }
 
 /**

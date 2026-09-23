@@ -41,8 +41,9 @@ function getScreeningEnd(screening, film) {
 
 /**
  * Check if two screenings overlap (same day only)
+ * Exported for independent plan-validity assertions in tests.
  */
-function screeningsOverlap(s1, s2, film1, film2) {
+export function screeningsOverlap(s1, s2, film1, film2) {
   if (s1.date !== s2.date) return false
   
   const start1 = timeToMinutes(s1.startTime)
