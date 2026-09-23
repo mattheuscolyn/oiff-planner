@@ -13,6 +13,7 @@ import { resolveConflictChoice } from '../planner/conflictResolution'
 import {
   buildPairCheckConstraintOverrides,
   buildRequireBothUpdates,
+  shapePairCheckError,
   shapePairCheckResult
 } from '../planner/pairCheck'
 import { INTEREST_LEVELS } from '../utils/userState'
@@ -146,19 +147,14 @@ function PlannerViewInner() {
       .catch(error => {
         if (error?.name === 'AbortError' || controller.signal.aborted) return
         console.error('Pair check failed:', error)
-        setPairCheckResult({
-          feasible: false,
-          reason: error.message || 'Pair check failed',
-          filmIdA,
-          filmIdB,
-          currentFilmCount: generatedPlan.filmCount,
-          pairFilmCount: 0,
-          filmCountDelta: null,
-          screeningA: null,
-          screeningB: null,
-          adds: [],
-          drops: []
-        })
+        setPairCheckResult(
+          shapePairCheckError({
+            error,
+            filmIdA,
+            filmIdB,
+            currentPlan: generatedPlan
+          })
+        )
         setPairCheckLoading(false)
       })
   }

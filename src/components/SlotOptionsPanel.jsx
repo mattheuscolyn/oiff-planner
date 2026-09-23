@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { formatDate, formatTime, getFilmById } from '../utils/festivalData'
+import {
+  formatPairCheckCountCopy,
+  formatPairCheckProofLines
+} from '../planner/pairCheck'
 import FilmPoster from './FilmPoster'
 import './SlotOptions.css'
 
@@ -140,9 +144,21 @@ function SlotOptionsPanel({
   )
 }
 
-function PairCheckResult({ pairCheck, filmAId, filmBId, onRequireBoth, onDismiss }) {
+export function PairCheckResult({ pairCheck, filmAId, filmBId, onRequireBoth, onDismiss }) {
   const filmA = getFilmById(filmAId)
   const filmB = getFilmById(filmBId)
+
+  if (pairCheck.status === 'error' || pairCheck.reasonCode === 'pair-check-error') {
+    return (
+      <div className="pair-check-result error">
+        <strong>Couldn&apos;t check these films</strong>
+        <p>Try again.</p>
+        <button type="button" className="linkish" onClick={onDismiss}>
+          Dismiss
+        </button>
+      </div>
+    )
+  }
 
   if (!pairCheck.feasible) {
     return (
@@ -164,15 +180,8 @@ function PairCheckResult({ pairCheck, filmAId, filmBId, onRequireBoth, onDismiss
     )
   }
 
-  const delta = pairCheck.filmCountDelta
-  let countLine = `You can still see ${pairCheck.pairFilmCount} films.`
-  if (delta === 0) {
-    countLine = `You can still see ${pairCheck.pairFilmCount} films (same maximum).`
-  } else if (delta < 0) {
-    countLine = `Both can fit, but the best schedule has ${pairCheck.pairFilmCount} films instead of ${pairCheck.currentFilmCount}.`
-  } else if (delta > 0) {
-    countLine = `Both can fit — best schedule grows to ${pairCheck.pairFilmCount} films.`
-  }
+  const countLine = formatPairCheckCountCopy(pairCheck)
+  const proofLines = formatPairCheckProofLines(pairCheck)
 
   const fmtScreening = s => {
     if (!s) return '—'
@@ -183,6 +192,11 @@ function PairCheckResult({ pairCheck, filmAId, filmBId, onRequireBoth, onDismiss
     <div className="pair-check-result feasible">
       <strong>Both can fit</strong>
       <p className="pair-check-count">{countLine}</p>
+      {proofLines.length > 0 && (
+        <p className="pair-check-proof">
+          {proofLines.join(' · ')}
+        </p>
+      )}
       <ul className="pair-check-screenings">
         <li>
           <em>{filmA?.title}</em>: {fmtScreening(pairCheck.screeningA)}

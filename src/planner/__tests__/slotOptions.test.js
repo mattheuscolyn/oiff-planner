@@ -12,7 +12,9 @@ import {
 import {
   buildRequireBothUpdates,
   buildPairCheckConstraintOverrides,
-  shapePairCheckResult
+  shapePairCheckResult,
+  shapePairCheckError,
+  formatPairCheckCountCopy
 } from '../pairCheck'
 import { generatePlanV3 } from '../optimizerV3'
 import { INTEREST_LEVELS } from '../../utils/userState'
@@ -285,15 +287,20 @@ describe('buildSlotOptions', () => {
     )
   })
 
-  it('Only way it fits this plan label correct', () => {
+  it('Only screening that can replace this slot label correct', () => {
     // alt has 2 attendance-valid but only a1 locally fits (a2 doesn't overlap planned)
     const { slotOptions } = buildSlotOptions(baseArgs)
     const alt = slotOptions.p1.find(o => o.filmId === 'alt')
     expect(alt.attendanceValidScreeningCount).toBe(2)
     expect(alt.localFitScreeningCount).toBe(1)
-    expect(alt.onlyCurrentPlanFit).toBe(true)
+    expect(alt.onlyLocalFitForSlot).toBe(true)
     expect(alt.onlyPublishedScreening).toBe(false)
-    expect(alt.availabilityBadge.code).toBe('only-plan-fit')
+    expect(alt.availabilityBadge.code).toBe('only-local-fit')
+    expect(alt.availabilityBadge.label).toBe(
+      'Only screening that can replace this slot'
+    )
+    expect(alt.availabilityBadge.label).not.toMatch(/Only way it fits this plan/i)
+    expect(alt.onlyCurrentPlanFit).toBeUndefined()
   })
 
   it('does not falsely say Only screening when multiple published showtimes exist', () => {
@@ -624,6 +631,104 @@ describe('pairCheck helpers', () => {
     )
     expect(adds.map(x => x.id)).toEqual(['b'])
     expect(drops.map(x => x.id)).toEqual(['c'])
+  })
+
+  it('delta 0 + unproven does not say maximum', () => {
+    const copy = formatPairCheckCountCopy({
+      filmCountDelta: 0,
+      pairFilmCount: 24,
+      currentFilmCount: 24,
+      pairMaxFilmCountProven: false,
+      currentMaxFilmCountProven: false
+    })
+    expect(copy.toLowerCase()).not.toContain('maximum')
+    expect(copy).toMatch(/best schedule found/i)
+  })
+
+  it('delta 0 + proven may say same proven maximum', () => {
+    const copy = formatPairCheckCountCopy({
+      filmCountDelta: 0,
+      pairFilmCount: 24,
+      currentFilmCount: 24,
+      pairMaxFilmCountProven: true,
+      currentMaxFilmCountProven: true
+    })
+    expect(copy).toMatch(/same proven maximum/i)
+  })
+
+  it('delta 0 + pair proven but current unproven does not claim current was proven', () => {
+    const copy = formatPairCheckCountCopy({
+      filmCountDelta: 0,
+      pairFilmCount: 24,
+      currentFilmCount: 24,
+      pairMaxFilmCountProven: true,
+      currentMaxFilmCountProven: false
+    })
+    expect(copy).toMatch(/24-film maximum is proven for this requirement set/i)
+    expect(copy).not.toMatch(/same proven maximum/i)
+  })
+
+  it('negative delta + unproven says best schedule found, not maximum is', () => {
+    const copy = formatPairCheckCountCopy({
+      filmCountDelta: -1,
+      pairFilmCount: 23,
+      currentFilmCount: 24,
+      pairMaxFilmCountProven: false,
+      currentMaxFilmCountProven: true
+    })
+    expect(copy).toMatch(/best schedule found/i)
+    expect(copy.toLowerCase()).not.toMatch(/maximum is/)
+  })
+
+  it('negative delta + proven may say maximum is 23', () => {
+    const copy = formatPairCheckCountCopy({
+      filmCountDelta: -1,
+      pairFilmCount: 23,
+      currentFilmCount: 24,
+      pairMaxFilmCountProven: true,
+      currentMaxFilmCountProven: true
+    })
+    expect(copy).toMatch(/maximum is 23/i)
+  })
+
+  it('shapePairCheckResult carries current and pair proof flags', () => {
+    const shaped = shapePairCheckResult({
+      currentPlan: {
+        filmCount: 24,
+        filmIds: ['a'],
+        screenings: [],
+        metadata: { maxFilmCountProven: true }
+      },
+      pairPlan: {
+        filmCount: 24,
+        filmIds: ['a', 'b'],
+        screenings: [],
+        metadata: { maxFilmCountProven: false, preferenceOptimalityProven: false }
+      },
+      filmIdA: 'a',
+      filmIdB: 'b',
+      filmMap: filmMapOf([
+        { id: 'a', title: 'A' },
+        { id: 'b', title: 'B' }
+      ])
+    })
+    expect(shaped.status).toBe('feasible')
+    expect(shaped.currentMaxFilmCountProven).toBe(true)
+    expect(shaped.pairMaxFilmCountProven).toBe(false)
+    expect(shaped.maxFilmCountProven).toBe(false)
+  })
+
+  it('shapePairCheckError is distinct from infeasible', () => {
+    const err = shapePairCheckError({
+      error: new Error('worker boom'),
+      filmIdA: 'a',
+      filmIdB: 'b',
+      currentPlan: { filmCount: 24, metadata: { maxFilmCountProven: true } }
+    })
+    expect(err.status).toBe('error')
+    expect(err.reasonCode).toBe('pair-check-error')
+    expect(err.feasible).toBe(false)
+    expect(err.reason).toMatch(/worker boom/)
   })
 })
 

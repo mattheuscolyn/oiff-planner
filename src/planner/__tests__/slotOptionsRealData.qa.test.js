@@ -70,7 +70,7 @@ describe('slot options real-data QA', () => {
             localFits: o.localFitScreeningCount,
             onlyPublished: o.onlyPublishedScreening,
             onlyAttendance: o.onlyAttendanceValidScreening,
-            onlyPlanFit: o.onlyCurrentPlanFit,
+            onlyLocalFit: o.onlyLocalFitForSlot,
             badge: o.availabilityBadge?.label
           }))
         }

@@ -54,7 +54,7 @@ export function canLocallyReplace(planScreenings, removedScreeningId, candidate,
 function availabilityBadge({
   onlyPublishedScreening,
   onlyAttendanceValidScreening,
-  onlyCurrentPlanFit,
+  onlyLocalFitForSlot,
   attendanceValidScreeningCount,
   otherAttendanceScreenings
 }) {
@@ -67,10 +67,10 @@ function availabilityBadge({
       label: 'Only screening during your attendance'
     }
   }
-  if (onlyCurrentPlanFit) {
+  if (onlyLocalFitForSlot) {
     return {
-      code: 'only-plan-fit',
-      label: 'Only way it fits this plan'
+      code: 'only-local-fit',
+      label: 'Only screening that can replace this slot'
     }
   }
   const extra = Math.max(0, attendanceValidScreeningCount - 1)
@@ -167,7 +167,9 @@ export function buildSlotOptions({
       const onlyPublishedScreening = published.length === 1
       const onlyAttendanceValidScreening =
         attendanceValid.length === 1 && published.length > 1
-      const onlyCurrentPlanFit =
+      // Exactly one attendance-valid screening can locally replace THIS row
+      // (not a claim about global plan fit / other slots / rearrangement).
+      const onlyLocalFitForSlot =
         localFits.length === 1 && attendanceValid.length > 1
 
       const otherAttendanceScreenings = attendanceValid
@@ -183,7 +185,7 @@ export function buildSlotOptions({
       const badge = availabilityBadge({
         onlyPublishedScreening,
         onlyAttendanceValidScreening,
-        onlyCurrentPlanFit,
+        onlyLocalFitForSlot,
         attendanceValidScreeningCount: attendanceValid.length,
         otherAttendanceScreenings
       })
@@ -202,7 +204,7 @@ export function buildSlotOptions({
         localFitScreeningCount: localFits.length,
         onlyPublishedScreening,
         onlyAttendanceValidScreening,
-        onlyCurrentPlanFit,
+        onlyLocalFitForSlot,
         overlapsPlannedScreening: true,
         availabilityBadge: badge,
         otherAttendanceScreenings
