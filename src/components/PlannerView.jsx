@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { films, screenings } from '../utils/festivalData'
 import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
 import {
-  generateCurrentPlan,
   appendUniqueId,
   applyExcludeFilm,
   removeRequiredFilm,
   DEFAULT_TIME_BUDGET_MS
 } from '../planner/generateCurrentPlan'
+import { generateCurrentPlanAsync } from '../planner/runPlanInWorker'
 import { INTEREST_LEVELS } from '../utils/userState'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
@@ -30,41 +30,49 @@ function PlannerViewInner() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [searchStatus, setSearchStatus] = useState('')
   const [generationError, setGenerationError] = useState(null)
+  const abortRef = useRef(null)
 
   const runPlanGeneration = (constraintOverrides = {}) => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setIsGenerating(true)
     setSearchStatus('Searching feasible schedules…')
     setGenerationError(null)
 
-    // Yield so the UI can paint before a long search
-    setTimeout(() => {
-      try {
-        const plan = generateCurrentPlan({
-          films,
-          screenings,
-          interests,
-          constraints,
-          arrival,
-          departure,
-          constraintOverrides,
-          timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
-          onProgress: ({ combinationsExplored, bestFilmCount, elapsedMs }) => {
-            setSearchStatus(
-              `Searching… best so far ${bestFilmCount} films · ${(elapsedMs / 1000).toFixed(1)}s · ${combinationsExplored.toLocaleString()} combos`
-            )
-          }
-        })
-
+    generateCurrentPlanAsync({
+      films,
+      screenings,
+      interests,
+      constraints,
+      arrival,
+      departure,
+      constraintOverrides,
+      timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
+      signal: controller.signal,
+      onProgress: ({ combinationsExplored, bestFilmCount, elapsedMs, phase }) => {
+        const phaseHint = phase ? ` (${phase})` : ''
+        setSearchStatus(
+          `Searching${phaseHint}… best so far ${bestFilmCount} films · ${(elapsedMs / 1000).toFixed(1)}s · ${Number(combinationsExplored || 0).toLocaleString()} combos`
+        )
+      }
+    })
+      .then(plan => {
+        if (controller.signal.aborted) return
         setGeneratedPlan(plan)
         setIsGenerating(false)
         setSearchStatus('')
-      } catch (error) {
+      })
+      .catch(error => {
+        if (error?.name === 'AbortError' || controller.signal.aborted) return
         console.error('Plan generation failed:', error)
         setIsGenerating(false)
         setSearchStatus('')
         setGenerationError(error.message || 'An unexpected error occurred')
-      }
-    }, 30)
+      })
   }
 
   const handleBuildPlan = () => {
@@ -178,7 +186,7 @@ function PlannerViewInner() {
                   handleExcludeFilm
                 )}
 
-                {renderOmissions(generatedPlan.omissions)}
+                {renderOmissions(generatedPlan.omissions, handleRequireFilm)}
                 {renderAlternatives(generatedPlan.alternatives)}
               </>
             )
@@ -192,7 +200,8 @@ function PlannerViewInner() {
 function renderCoverageHeader(plan) {
   const c = plan.coverage
   const meta = plan.metadata || {}
-  const proven = meta.optimalityProven
+  const countProven = meta.maxFilmCountProven
+  const prefProven = meta.preferenceOptimalityProven
 
   return (
     <div className="planner-stats-block">
@@ -216,8 +225,21 @@ function renderCoverageHeader(plan) {
           )}
         </div>
       )}
-      <div className={`optimality-badge ${proven ? 'proven' : 'best-found'}`}>
-        {proven ? 'Maximum proven' : 'Best found — maximum not yet proven'}
+      <div className={`optimality-badge ${countProven ? 'proven' : 'best-found'}`}>
+        {countProven ? (
+          prefProven ? (
+            <>Maximum count proven · Best preference mix proven</>
+          ) : (
+            <>
+              Maximum count proven
+              <span className="optimality-sub">
+                Best preference mix found within search budget
+              </span>
+            </>
+          )
+        ) : (
+          <>Best found — maximum count not yet proven</>
+        )}
         {meta.elapsedMs != null && (
           <span className="optimality-meta">
             {' '}· {(meta.elapsedMs / 1000).toFixed(1)}s
@@ -228,21 +250,36 @@ function renderCoverageHeader(plan) {
   )
 }
 
-function renderOmissions(omissions) {
+function renderOmissions(omissions, onRequire) {
   if (!omissions?.length) return null
   return (
     <div className="omitted-section">
       <h3>Not in This Plan</h3>
       <p className="omitted-explanation">Rated films that did not fit this schedule:</p>
-      {omissions.map(o => (
-        <div key={o.film.id} className="omitted-film">
-          <div className="omitted-info">
-            <strong>{o.film.title}</strong>
-            <span className={`interest-badge ${o.interest}`}>{formatInterest(o.interest)}</span>
+      {omissions.map(o => {
+        const canRequire =
+          onRequire &&
+          (o.interest === INTEREST_LEVELS.WANT_TO_SEE ||
+            o.interest === INTEREST_LEVELS.MAYBE)
+        return (
+          <div key={o.film.id} className="omitted-film">
+            <div className="omitted-info">
+              <strong>{o.film.title}</strong>
+              <span className={`interest-badge ${o.interest}`}>{formatInterest(o.interest)}</span>
+            </div>
+            {o.reason && <div className="omission-reason">{o.reason}</div>}
+            {canRequire && (
+              <button
+                type="button"
+                className="omitted-require-button"
+                onClick={() => onRequire(o.film.id)}
+              >
+                Require
+              </button>
+            )}
           </div>
-          {o.reason && <div className="omission-reason">{o.reason}</div>}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

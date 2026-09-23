@@ -21,11 +21,15 @@ import {
   summarizeAlternative
 } from './planResult'
 
-/** Default interactive budget — long enough to often prove on this fixed dataset */
-export const DEFAULT_TIME_BUDGET_MS = 45000
+/** Default interactive budget — split across search phases */
+export const DEFAULT_TIME_BUDGET_MS = 20000
 
 /**
- * Generate plan using daily enumeration + global combination.
+ * Generate plan using daily enumeration + phased global search.
+ *
+ * Phase A: maximize film count (prove via daily-capacity upper bound when hit)
+ * Phase B: optimize preference among exactly-M film sets
+ * Phase C: independently find best (M-1) film set
  */
 export function generatePlanV3(config) {
   const {
@@ -58,7 +62,6 @@ export function generatePlanV3(config) {
     requiredResolution.requiredFilmIds
   )
 
-  // Required films must have attendance-feasible screenings
   for (const filmId of data.requiredFilmIds) {
     const feasible = data.filmToFeasibleScreenings.get(filmId) || []
     if (feasible.length === 0) {
@@ -71,7 +74,6 @@ export function generatePlanV3(config) {
     }
   }
 
-  // Quick check: required films cannot all be scheduled together
   const requiredFeasible = checkRequiredFeasibility(data)
   if (!requiredFeasible.ok) {
     return infeasibleResult(requiredFeasible.reason, startTime, {
@@ -85,20 +87,146 @@ export function generatePlanV3(config) {
   console.log(`[OptimizerV3] Candidate screenings: ${data.candidateScreenings.length}`)
 
   const dailySchedules = enumerateDailySchedules(data)
-  const remainingBudget = Math.max(50, timeBudgetMs - (performance.now() - startTime))
+  annotateSchedulePreferences(dailySchedules, interests)
 
-  const result = findOptimalGlobalCombination(
-    dailySchedules,
+  const days = Array.from(dailySchedules.keys()).sort()
+  const dailyMaxima = {}
+  let globalCountUpperBound = 0
+  for (const date of days) {
+    const max = data.maxPerDay.get(date) || 0
+    dailyMaxima[date] = max
+    globalCountUpperBound += max
+  }
+  data.dailyMaxima = dailyMaxima
+  data.globalCountUpperBound = globalCountUpperBound
+
+  console.log(`[OptimizerV3] Daily maxima:`, dailyMaxima)
+  console.log(`[OptimizerV3] Global count upper bound: ${globalCountUpperBound}`)
+
+  const usedMs = performance.now() - startTime
+  const remaining = Math.max(100, timeBudgetMs - usedMs)
+  const budgetA = remaining * 0.25
+
+  const phaseA = runCountPhase(dailySchedules, data, interests, budgetA, onProgress)
+  if (!phaseA.bestSolution) {
+    return infeasibleResult(
+      data.requiredFilmIds.length > 0
+        ? 'No schedule can include all required films.'
+        : 'No valid schedule found',
+      startTime,
+      {
+        requiredFilmIds: data.requiredFilmIds,
+        combinationsExplored: phaseA.combinationsExplored,
+        dailyMaxima,
+        globalCountUpperBound
+      }
+    )
+  }
+
+  const M = phaseA.bestSolution.filmCount
+  const maxFilmCountProven =
+    phaseA.maxFilmCountProven || M === globalCountUpperBound
+
+  console.log(
+    `[OptimizerV3] Phase A: M=${M} maxFilmCountProven=${maxFilmCountProven} ms=${phaseA.elapsedMs.toFixed(0)}`
+  )
+
+  // Reallocate leftover time after early Phase A stop (e.g. hit capacity bound)
+  const remainingAfterA = Math.max(100, timeBudgetMs - (performance.now() - startTime))
+  const budgetB = remainingAfterA * 0.55
+  const budgetC = remainingAfterA * 0.45
+
+  const schedulesForM = filterSchedulesForExactCount(dailySchedules, data, M)
+  const phaseB = runFixedCountPreferencePhase(
+    schedulesForM,
     data,
     interests,
-    remainingBudget,
-    onProgress
+    M,
+    budgetB,
+    onProgress,
+    {
+      collectSameSize: true,
+      phaseLabel: 'preference@M',
+      seedSolution: phaseA.bestSolution,
+      shortCircuitUniformPreference: preferencesAreUniform(data, interests)
+    }
   )
+
+  let bestSolution = phaseA.bestSolution
+  let preferenceOptimalityProven = false
+  let sameSizeAlts = []
+
+  if (phaseB.bestSolution && phaseB.bestSolution.filmCount === M) {
+    bestSolution = phaseB.bestSolution
+    preferenceOptimalityProven = phaseB.exhausted
+    sameSizeAlts = phaseB.sameSizeAlts || []
+  } else {
+    // Keep Phase A plan if preference search found nothing better
+    bestSolution = phaseA.bestSolution
+    preferenceOptimalityProven = false
+    sameSizeAlts = phaseB.sameSizeAlts || []
+  }
+
+  console.log(
+    `[OptimizerV3] Phase B: preferenceProven=${preferenceOptimalityProven} sameSize=${sameSizeAlts.length} ms=${phaseB.elapsedMs.toFixed(0)}`
+  )
+
+  let oneFewerBest = null
+  let oneFewerPreferenceProven = false
+  let phaseC = { combinationsExplored: 0, elapsedMs: 0 }
+  if (M > 0) {
+    const remainingAfterB = Math.max(50, timeBudgetMs - (performance.now() - startTime))
+    const schedulesForM1 = filterSchedulesForExactCount(dailySchedules, data, M - 1)
+    phaseC = runFixedCountPreferencePhase(
+      schedulesForM1,
+      data,
+      interests,
+      M - 1,
+      Math.max(remainingAfterB, budgetC * 0.5),
+      onProgress,
+      {
+        collectSameSize: false,
+        phaseLabel: 'preference@M-1',
+        shortCircuitUniformPreference: preferencesAreUniform(data, interests)
+      }
+    )
+    if (phaseC.bestSolution) {
+      oneFewerBest = phaseC.bestSolution
+      oneFewerPreferenceProven = phaseC.exhausted
+    }
+    console.log(
+      `[OptimizerV3] Phase C: oneFewer=${oneFewerBest?.filmCount ?? 'none'} proven=${oneFewerPreferenceProven} ms=${phaseC.elapsedMs.toFixed(0)}`
+    )
+  }
 
   const totalMs = performance.now() - startTime
   console.log(`[OptimizerV3] Total time: ${totalMs.toFixed(1)}ms`)
 
-  return enrichResult(result, data, interests, constraints, totalMs)
+  return enrichResult(
+    {
+      bestSolution,
+      sameSizeAlts,
+      oneFewerBest,
+      oneFewerPreferenceProven,
+      maxFilmCountProven,
+      preferenceOptimalityProven,
+      combinationsExplored:
+        phaseA.combinationsExplored +
+        phaseB.combinationsExplored +
+        phaseC.combinationsExplored,
+      phaseMs: {
+        count: phaseA.elapsedMs,
+        preferenceAtMax: phaseB.elapsedMs,
+        oneFewer: phaseC.elapsedMs
+      },
+      dailyMaxima,
+      globalCountUpperBound
+    },
+    data,
+    interests,
+    constraints,
+    totalMs
+  )
 }
 
 function infeasibleResult(reason, startTime, extra = {}) {
@@ -114,7 +242,8 @@ function infeasibleResult(reason, startTime, extra = {}) {
     requiredFilmIds: extra.requiredFilmIds || [],
     metadata: {
       maxDistinctFilms: 0,
-      optimalityProven: true,
+      maxFilmCountProven: false,
+      preferenceOptimalityProven: false,
       combinationsExplored: 0,
       elapsedMs: performance.now() - startTime,
       status: 'infeasible',
@@ -292,7 +421,7 @@ function enumerateDailySchedules(data) {
     }
 
     enumerate(0, [], new Set())
-    const pruned = pruneDominatedSchedules(schedules)
+    const pruned = pruneDominatedSchedules(schedules.filter(s => s.filmCount > 0))
     // Prefer schedules that cover more required films, then more films
     pruned.sort((a, b) => {
       if (b.requiredCount !== a.requiredCount) return b.requiredCount - a.requiredCount
@@ -317,169 +446,140 @@ function countRequiredIn(filmSet, requiredFilmSet) {
 }
 
 function pruneDominatedSchedules(schedules) {
-  const nonDominated = []
+  // Dedupe by film set only. Do NOT drop smaller non-dominated-looking
+  // schedules: Phase C needs day packs of size max-1, and preference
+  // search may need non-maximal day packs when the global target is below
+  // the capacity upper bound.
+  const byKey = new Map()
   for (const schedule of schedules) {
-    let isDominated = false
-    for (const other of schedules) {
-      if (schedule === other) continue
-      if (other.filmCount > schedule.filmCount) {
-        const allIncluded = Array.from(schedule.films).every(id => other.films.has(id))
-        if (allIncluded) {
-          isDominated = true
-          break
-        }
-      }
+    const key = filmSetKey(schedule.films)
+    if (!byKey.has(key)) {
+      byKey.set(key, schedule)
     }
-    if (!isDominated) nonDominated.push(schedule)
   }
-  return nonDominated
+  return Array.from(byKey.values())
 }
 
-function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudgetMs, onProgress) {
+function annotateSchedulePreferences(dailySchedules, interests) {
+  for (const schedules of dailySchedules.values()) {
+    for (const schedule of schedules) {
+      const pref = preferenceScore(schedule.films, interests)
+      schedule.wantCount = pref.wantToSeeCount
+      schedule.maybeCount = pref.maybeCount
+      schedule.unratedCount = pref.unratedCount
+      schedule.mustCount = pref.mustSeeCount
+      schedule.preferenceTuple = pref.tuple
+    }
+    // Prefer higher required, film count, wants, maybes; unrated last
+    schedules.sort((a, b) => {
+      if (b.requiredCount !== a.requiredCount) return b.requiredCount - a.requiredCount
+      if (b.filmCount !== a.filmCount) return b.filmCount - a.filmCount
+      if (b.wantCount !== a.wantCount) return b.wantCount - a.wantCount
+      if (b.maybeCount !== a.maybeCount) return b.maybeCount - a.maybeCount
+      if (a.unratedCount !== b.unratedCount) return a.unratedCount - b.unratedCount
+      return 0
+    })
+  }
+}
+
+/**
+ * Restrict day packs so exact global targetCount remains reachable.
+ * slack = upperBound - target ⇒ keep schedules with filmCount >= dayMax - slack.
+ * For target=24 (=bound) only max packs; for 23, max and max-1.
+ */
+function filterSchedulesForExactCount(dailySchedules, data, targetCount) {
+  const upper = data.globalCountUpperBound || 0
+  const slack = Math.max(0, upper - targetCount)
+  const filtered = new Map()
+  for (const [date, schedules] of dailySchedules.entries()) {
+    const dayMax = data.maxPerDay.get(date) || 0
+    const minKeep = Math.max(0, dayMax - slack)
+    filtered.set(
+      date,
+      schedules.filter(s => s.filmCount >= minKeep)
+    )
+  }
+  return filtered
+}
+
+function preferencesAreUniform(data, interests) {
+  const ranks = new Set()
+  for (const film of data.candidateFilms) {
+    const interest = interests[film.id]
+    if (interest === INTEREST_LEVELS.SKIP || interest === INTEREST_LEVELS.SEEN) continue
+    let rank = 1 // unrated
+    if (interest === INTEREST_LEVELS.MUST_SEE) rank = 4
+    else if (interest === INTEREST_LEVELS.WANT_TO_SEE) rank = 3
+    else if (interest === INTEREST_LEVELS.MAYBE) rank = 2
+    ranks.add(rank)
+    if (ranks.size > 1) return false
+  }
+  return true
+}
+
+function solutionFromFilms(globalScreenings, globalFilms, interests) {
+  const pref = preferenceScore(globalFilms, interests)
+  return {
+    screenings: globalScreenings.slice(),
+    filmIds: new Set(globalFilms),
+    ...pref,
+    preferenceTuple: pref.tuple,
+    interestCounts: {
+      'must-see': pref.mustSeeCount,
+      'want-to-see': pref.wantToSeeCount,
+      maybe: pref.maybeCount,
+      unrated: pref.unratedCount
+    }
+  }
+}
+
+/**
+ * Phase A — maximize film count. Hitting the daily-capacity upper bound
+ * proves the count immediately without exhaustive enumeration.
+ */
+function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress) {
   const startTime = performance.now()
   const deadline = startTime + timeBudgetMs
+  const upperBound = data.globalCountUpperBound || 0
 
-  // Process days with fewer schedules first (reduces branching early)
   const days = Array.from(dailySchedules.keys()).sort(
     (a, b) => (dailySchedules.get(a)?.length || 0) - (dailySchedules.get(b)?.length || 0)
   )
 
-  console.log(`[OptimizerV3] Finding optimal global combination...`)
-  console.log(`[OptimizerV3] Days to combine: ${days.length}`)
-
-  // Precompute optimistic remaining capacity
   const suffixMax = new Array(days.length + 1).fill(0)
   for (let i = days.length - 1; i >= 0; i--) {
-    const date = days[i]
-    suffixMax[i] = suffixMax[i + 1] + (data.maxPerDay.get(date) || 0)
+    suffixMax[i] = suffixMax[i + 1] + (data.maxPerDay.get(days[i]) || 0)
   }
 
-  let bestTuple = null
+  // Prefer high film-count day schedules for Phase A
+  const orderedByDay = days.map(date => {
+    const list = (dailySchedules.get(date) || []).slice()
+    list.sort((a, b) => {
+      if (b.requiredCount !== a.requiredCount) return b.requiredCount - a.requiredCount
+      return b.filmCount - a.filmCount
+    })
+    return list
+  })
+
+  let bestCount = -1
   let bestSolution = null
-  let bestKey = null
   let combinationsExplored = 0
   let timedOut = false
-
-  // Bounded alternative storage (film-set deduped)
-  const sameSizeAlts = new Map() // key -> alt, max ~8
-  let oneFewerBest = null
-
-  function considerSolution(globalScreenings, globalFilms) {
-    for (const id of data.requiredFilmIds) {
-      if (!globalFilms.has(id)) return
-    }
-
-    const pref = preferenceScore(globalFilms, interests)
-    const key = filmSetKey(globalFilms)
-
-    if (!bestSolution || comparePreferenceTuples(pref.tuple, bestTuple) > 0) {
-      // Demote previous best into alternative pools if useful
-      if (bestSolution) {
-        ingestAlternative(bestKey, bestSolution, bestTuple)
-      }
-      bestSolution = {
-        screenings: globalScreenings.slice(),
-        filmIds: new Set(globalFilms),
-        ...pref,
-        interestCounts: {
-          'must-see': pref.mustSeeCount,
-          'want-to-see': pref.wantToSeeCount,
-          maybe: pref.maybeCount,
-          unrated: pref.unratedCount
-        }
-      }
-      bestTuple = pref.tuple
-      bestKey = key
-      // Drop same-size alts that are no longer max
-      for (const [k, alt] of sameSizeAlts) {
-        if (alt.filmCount < bestTuple[0]) sameSizeAlts.delete(k)
-      }
-      if (oneFewerBest && oneFewerBest.filmCount < bestTuple[0] - 1) {
-        oneFewerBest = null
-      }
-      return
-    }
-
-    if (pref.filmCount === bestTuple[0] && key !== bestKey) {
-      ingestSameSize(key, globalScreenings, globalFilms, pref)
-    } else if (pref.filmCount === bestTuple[0] - 1) {
-      ingestOneFewer(globalScreenings, globalFilms, pref)
-    }
-  }
-
-  function ingestAlternative(key, solution, tuple) {
-    if (!solution || !key) return
-    if (tuple[0] === bestTuple[0] && key !== bestKey) {
-      ingestSameSize(key, solution.screenings, solution.filmIds, {
-        filmCount: tuple[0],
-        mustSeeCount: tuple[1],
-        wantToSeeCount: tuple[2],
-        maybeCount: tuple[3],
-        unratedCount: tuple[4],
-        tuple
-      })
-    } else if (tuple[0] === bestTuple[0] - 1) {
-      ingestOneFewer(solution.screenings, solution.filmIds, {
-        filmCount: tuple[0],
-        mustSeeCount: tuple[1],
-        wantToSeeCount: tuple[2],
-        maybeCount: tuple[3],
-        unratedCount: tuple[4],
-        tuple
-      })
-    }
-  }
-
-  function ingestSameSize(key, screenings, filmIds, pref) {
-    const existing = sameSizeAlts.get(key)
-    if (existing && comparePreferenceTuples(pref.tuple, existing.preferenceTuple) <= 0) return
-    sameSizeAlts.set(key, {
-      filmIds: filmIds instanceof Set ? new Set(filmIds) : new Set(filmIds),
-      screenings: screenings.slice(),
-      preferenceTuple: pref.tuple,
-      filmCount: pref.filmCount
-    })
-    if (sameSizeAlts.size > 8) {
-      // Drop weakest by preference
-      let worstKey = null
-      let worstTuple = null
-      for (const [k, alt] of sameSizeAlts) {
-        if (!worstTuple || comparePreferenceTuples(alt.preferenceTuple, worstTuple) < 0) {
-          worstTuple = alt.preferenceTuple
-          worstKey = k
-        }
-      }
-      if (worstKey) sameSizeAlts.delete(worstKey)
-    }
-  }
-
-  function ingestOneFewer(screenings, filmIds, pref) {
-    if (
-      oneFewerBest &&
-      comparePreferenceTuples(pref.tuple, oneFewerBest.preferenceTuple) <= 0
-    ) {
-      return
-    }
-    oneFewerBest = {
-      filmIds: filmIds instanceof Set ? new Set(filmIds) : new Set(filmIds),
-      screenings: screenings.slice(),
-      preferenceTuple: pref.tuple,
-      filmCount: pref.filmCount
-    }
-  }
+  let hitUpperBound = false
 
   function combine(dayIndex, globalScreenings, globalFilms, requiredCovered) {
     combinationsExplored++
 
-    if (combinationsExplored % 5000 === 0) {
+    if (combinationsExplored % 2000 === 0) {
       if (performance.now() >= deadline) {
         timedOut = true
         return
       }
       if (onProgress) {
         onProgress({
+          phase: 'count',
           combinationsExplored,
-          bestFilmCount: bestSolution?.filmCount || 0,
+          bestFilmCount: bestCount > 0 ? bestCount : 0,
           elapsedMs: performance.now() - startTime
         })
       }
@@ -490,39 +590,33 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
       return
     }
 
+    if (hitUpperBound) return
+
     if (dayIndex >= days.length) {
-      considerSolution(globalScreenings, globalFilms)
+      if (requiredCovered < data.requiredFilmIds.length) return
+      const count = globalFilms.size
+      if (count > bestCount) {
+        bestCount = count
+        bestSolution = solutionFromFilms(globalScreenings, globalFilms, interests)
+        if (upperBound > 0 && bestCount >= upperBound) {
+          hitUpperBound = true
+        }
+      }
       return
     }
 
-    // Optimistic upper bound on film count
-    if (bestTuple) {
-      const optimistic = globalFilms.size + suffixMax[dayIndex]
-      if (optimistic < bestTuple[0]) return
-    }
+    const optimistic = globalFilms.size + suffixMax[dayIndex]
+    if (optimistic <= bestCount) return
 
-    // Remaining required films must still be coverable from remaining days' screenings
-    const requiredLeft = data.requiredFilmIds.length - requiredCovered
-    if (requiredLeft > 0) {
-      let canCover = 0
-      for (let d = dayIndex; d < days.length; d++) {
-        for (const sched of dailySchedules.get(days[d])) {
-          // rough: any schedule that adds a missing required
-          for (const fid of sched.films) {
-            if (data.requiredFilmSet.has(fid) && !globalFilms.has(fid)) {
-              canCover++
-            }
-          }
-        }
-      }
-      // This bound is loose; skip aggressive prune if uncertain
-      void canCover
-    }
-
-    const daySchedules = dailySchedules.get(days[dayIndex])
+    const daySchedules = orderedByDay[dayIndex]
 
     for (const daySchedule of daySchedules) {
       if (dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, data.filmMap)) {
+        continue
+      }
+
+      // Bound: even taking this schedule cannot beat best
+      if (globalFilms.size + daySchedule.filmCount + suffixMax[dayIndex + 1] <= bestCount) {
         continue
       }
 
@@ -538,53 +632,249 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
 
       combine(dayIndex + 1, globalScreenings, globalFilms, requiredCovered + addedRequired)
 
-      // backtrack
       globalScreenings.length -= addedScreenings.length
       for (const fid of addedFilms) globalFilms.delete(fid)
 
-      if (timedOut) return
+      if (timedOut || hitUpperBound) return
     }
 
-    // Skip day
-    combine(dayIndex + 1, globalScreenings, globalFilms, requiredCovered)
+    // Skip day (only useful if required coverage / count still possible)
+    if (globalFilms.size + suffixMax[dayIndex + 1] > bestCount) {
+      combine(dayIndex + 1, globalScreenings, globalFilms, requiredCovered)
+    }
   }
 
   combine(0, [], new Set(), 0)
 
-  const elapsed = performance.now() - startTime
-  const optimalityProven = !timedOut
+  const elapsedMs = performance.now() - startTime
+  const exhausted = !timedOut
+  const maxFilmCountProven =
+    hitUpperBound || (exhausted && bestSolution != null)
 
-  console.log(`[OptimizerV3] Combinations explored: ${combinationsExplored}`)
-  console.log(`[OptimizerV3] Best solution: ${bestSolution?.filmCount || 0} films`)
-  console.log(`[OptimizerV3] Same-size alts: ${sameSizeAlts.size}`)
-  console.log(`[OptimizerV3] Timed out: ${timedOut}`)
-  console.log(`[OptimizerV3] Optimality proven: ${optimalityProven}`)
+  return {
+    bestSolution,
+    combinationsExplored,
+    elapsedMs,
+    exhausted,
+    maxFilmCountProven,
+    hitUpperBound
+  }
+}
 
-  if (!bestSolution) {
+/**
+ * Phase B/C — optimize preference among plans with exactly `targetCount` films.
+ */
+function runFixedCountPreferencePhase(
+  dailySchedules,
+  data,
+  interests,
+  targetCount,
+  timeBudgetMs,
+  onProgress,
+  options = {}
+) {
+  const { collectSameSize = false, phaseLabel = 'fixed-count', seedSolution = null, shortCircuitUniformPreference = false } = options
+  const startTime = performance.now()
+  const deadline = startTime + timeBudgetMs
+
+  if (targetCount < 0) {
     return {
-      infeasible: true,
-      reason:
-        data.requiredFilmIds.length > 0
-          ? 'No schedule can include all required films.'
-          : 'No valid schedule found',
-      screenings: [],
-      filmCount: 0,
+      bestSolution: null,
       sameSizeAlts: [],
-      oneFewerBest: null,
-      combinationsExplored,
-      optimalityProven,
-      elapsedMs: elapsed
+      combinationsExplored: 0,
+      elapsedMs: 0,
+      exhausted: true
     }
   }
 
+  // When every eligible film has the same preference rank, any feasible
+  // targetCount plan is preference-optimal.
+  if (shortCircuitUniformPreference && seedSolution && seedSolution.filmCount === targetCount) {
+    return {
+      bestSolution: seedSolution,
+      sameSizeAlts: [],
+      combinationsExplored: 0,
+      elapsedMs: performance.now() - startTime,
+      exhausted: true
+    }
+  }
+
+  const days = Array.from(dailySchedules.keys()).sort(
+    (a, b) => (dailySchedules.get(a)?.length || 0) - (dailySchedules.get(b)?.length || 0)
+  )
+
+  const suffixMax = new Array(days.length + 1).fill(0)
+  for (let i = days.length - 1; i >= 0; i--) {
+    suffixMax[i] = suffixMax[i + 1] + (data.maxPerDay.get(days[i]) || 0)
+  }
+
+  // Prefer preference-rich day schedules (already annotated/sorted)
+  const orderedByDay = days.map(date => (dailySchedules.get(date) || []).slice())
+
+  let bestTuple = null
+  let bestSolution = null
+  let bestKey = null
+  let combinationsExplored = 0
+  let timedOut = false
+  let uniformDone = false
+  const sameSizeAlts = new Map()
+
+  if (seedSolution && seedSolution.filmCount === targetCount) {
+    bestSolution = seedSolution
+    bestTuple = seedSolution.preferenceTuple || preferenceScore(seedSolution.filmIds, interests).tuple
+    bestKey = filmSetKey(seedSolution.filmIds)
+    if (shortCircuitUniformPreference && !collectSameSize) {
+      return {
+        bestSolution,
+        sameSizeAlts: [],
+        combinationsExplored: 0,
+        elapsedMs: performance.now() - startTime,
+        exhausted: true
+      }
+    }
+  }
+
+  function coversRequired(globalFilms) {
+    for (const id of data.requiredFilmIds) {
+      if (!globalFilms.has(id)) return false
+    }
+    return true
+  }
+
+  function ingestSameSize(key, screenings, filmIds, pref) {
+    if (!collectSameSize) return
+    if (key === bestKey) return
+    const existing = sameSizeAlts.get(key)
+    if (existing && comparePreferenceTuples(pref.tuple, existing.preferenceTuple) <= 0) return
+    sameSizeAlts.set(key, {
+      filmIds: new Set(filmIds),
+      screenings: screenings.slice(),
+      preferenceTuple: pref.tuple,
+      filmCount: pref.filmCount
+    })
+    if (sameSizeAlts.size > 8) {
+      let worstKey = null
+      let worstTuple = null
+      for (const [k, alt] of sameSizeAlts) {
+        if (!worstTuple || comparePreferenceTuples(alt.preferenceTuple, worstTuple) < 0) {
+          worstTuple = alt.preferenceTuple
+          worstKey = k
+        }
+      }
+      if (worstKey) sameSizeAlts.delete(worstKey)
+    }
+  }
+
+  function consider(globalScreenings, globalFilms) {
+    if (globalFilms.size !== targetCount) return
+    if (!coversRequired(globalFilms)) return
+
+    const pref = preferenceScore(globalFilms, interests)
+    const key = filmSetKey(globalFilms)
+
+    if (!bestSolution || comparePreferenceTuples(pref.tuple, bestTuple) > 0) {
+      if (bestSolution && collectSameSize) {
+        ingestSameSize(bestKey, bestSolution.screenings, bestSolution.filmIds, {
+          tuple: bestTuple,
+          filmCount: bestTuple[0]
+        })
+      }
+      bestSolution = solutionFromFilms(globalScreenings, globalFilms, interests)
+      bestTuple = pref.tuple
+      bestKey = key
+      for (const [k, alt] of sameSizeAlts) {
+        if (alt.filmCount !== targetCount) sameSizeAlts.delete(k)
+      }
+      if (shortCircuitUniformPreference) {
+        uniformDone = true
+      }
+      return
+    }
+
+    if (collectSameSize && key !== bestKey) {
+      ingestSameSize(key, globalScreenings, globalFilms, pref)
+    }
+  }
+
+  function combine(dayIndex, globalScreenings, globalFilms, requiredCovered) {
+    combinationsExplored++
+
+    if (uniformDone) return
+
+    if (combinationsExplored % 2000 === 0) {
+      if (performance.now() >= deadline) {
+        timedOut = true
+        return
+      }
+      if (onProgress) {
+        onProgress({
+          phase: phaseLabel,
+          combinationsExplored,
+          bestFilmCount: bestSolution?.filmCount || 0,
+          elapsedMs: performance.now() - startTime
+        })
+      }
+    }
+
+    if (performance.now() >= deadline) {
+      timedOut = true
+      return
+    }
+
+    if (dayIndex >= days.length) {
+      consider(globalScreenings, globalFilms)
+      return
+    }
+
+    const size = globalFilms.size
+    if (size + suffixMax[dayIndex] < targetCount) return
+    if (size > targetCount) return
+
+    const daySchedules = orderedByDay[dayIndex]
+
+    for (const daySchedule of daySchedules) {
+      if (dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, data.filmMap)) {
+        continue
+      }
+
+      const nextSize = size + daySchedule.filmCount
+      if (nextSize > targetCount) continue
+      if (nextSize + suffixMax[dayIndex + 1] < targetCount) continue
+
+      let addedRequired = 0
+      const addedFilms = []
+      for (const fid of daySchedule.films) {
+        if (data.requiredFilmSet.has(fid)) addedRequired++
+        globalFilms.add(fid)
+        addedFilms.push(fid)
+      }
+      const addedScreenings = daySchedule.screenings
+      for (const s of addedScreenings) globalScreenings.push(s)
+
+      combine(dayIndex + 1, globalScreenings, globalFilms, requiredCovered + addedRequired)
+
+      globalScreenings.length -= addedScreenings.length
+      for (const fid of addedFilms) globalFilms.delete(fid)
+
+      if (timedOut || uniformDone) return
+    }
+
+    if (size + suffixMax[dayIndex + 1] >= targetCount) {
+      combine(dayIndex + 1, globalScreenings, globalFilms, requiredCovered)
+    }
+  }
+
+  combine(0, [], new Set(), 0)
+
+  const elapsedMs = performance.now() - startTime
+  const exhausted = !timedOut || uniformDone
+
   return {
-    infeasible: false,
     bestSolution,
     sameSizeAlts: Array.from(sameSizeAlts.values()),
-    oneFewerBest,
     combinationsExplored,
-    optimalityProven,
-    elapsedMs: elapsed
+    elapsedMs,
+    exhausted
   }
 }
 
@@ -602,10 +892,13 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
       requiredFilmIds: data.requiredFilmIds,
       metadata: {
         maxDistinctFilms: 0,
-        optimalityProven: raw.optimalityProven ?? true,
+        maxFilmCountProven: false,
+        preferenceOptimalityProven: false,
         combinationsExplored: raw.combinationsExplored || 0,
         elapsedMs: totalMs,
-        status: 'infeasible'
+        status: 'infeasible',
+        dailyMaxima: raw.dailyMaxima,
+        globalCountUpperBound: raw.globalCountUpperBound
       }
     }
   }
@@ -628,7 +921,6 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
     filmMap: data.filmMap
   })
 
-  // Must omitted from a "feasible" plan is an error state
   const mustOmitted = omissions.filter(o => o.interest === INTEREST_LEVELS.MUST_SEE)
   if (mustOmitted.length > 0) {
     return {
@@ -643,7 +935,8 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
       requiredFilmIds: data.requiredFilmIds,
       metadata: {
         maxDistinctFilms: 0,
-        optimalityProven: false,
+        maxFilmCountProven: false,
+        preferenceOptimalityProven: false,
         combinationsExplored: raw.combinationsExplored || 0,
         elapsedMs: totalMs,
         status: 'infeasible'
@@ -666,6 +959,17 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
       data.filmMap,
       eligibleTotals
     )
+    oneFewer.preferenceOptimalityProven = !!raw.oneFewerPreferenceProven
+  }
+
+  const maxFilmCountProven = !!raw.maxFilmCountProven
+  const preferenceOptimalityProven = !!raw.preferenceOptimalityProven
+
+  let status = 'best-found'
+  if (maxFilmCountProven && preferenceOptimalityProven) {
+    status = 'maximum-proven'
+  } else if (maxFilmCountProven) {
+    status = 'count-proven'
   }
 
   return {
@@ -687,11 +991,17 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
     requiredFilmIds: data.requiredFilmIds,
     metadata: {
       maxDistinctFilms: maxCount,
-      optimalityProven: raw.optimalityProven,
+      maxFilmCountProven,
+      preferenceOptimalityProven,
+      // Back-compat: only true when both count and preference are proven
+      optimalityProven: maxFilmCountProven && preferenceOptimalityProven,
       combinationsExplored: raw.combinationsExplored,
       elapsedMs: totalMs,
+      phaseMs: raw.phaseMs || null,
+      dailyMaxima: raw.dailyMaxima || data.dailyMaxima || null,
+      globalCountUpperBound: raw.globalCountUpperBound ?? data.globalCountUpperBound ?? null,
       distinctFilmSets: (raw.sameSizeAlts?.length || 0) + 1 + (raw.oneFewerBest ? 1 : 0),
-      status: raw.optimalityProven ? 'maximum-proven' : 'best-found'
+      status
     }
   }
 }

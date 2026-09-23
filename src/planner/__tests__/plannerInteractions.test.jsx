@@ -63,7 +63,7 @@ describe('generateCurrentPlan shared path', () => {
     expect(plan.infeasible).toBe(false)
     expect(plan.filmCount).toBeGreaterThan(0)
     expect(plan.coverage).toBeTruthy()
-    expect(plan.metadata.status).toMatch(/maximum-proven|best-found/)
+    expect(plan.metadata.status).toMatch(/maximum-proven|count-proven|best-found/)
     expect(validatePlan(plan, films, screenings).valid).toBe(true)
   }, 60000)
 

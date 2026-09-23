@@ -65,21 +65,21 @@ describe('verify:planner', () => {
           `${result.coverage?.maybe.included}/${result.coverage?.maybe.total} Maybe`
       )
       console.log(`status: ${result.metadata?.status}`)
-      console.log(`optimalityProven: ${result.metadata?.optimalityProven}`)
+      console.log(`maxFilmCountProven: ${result.metadata?.maxFilmCountProven}`)
+      console.log(`preferenceOptimalityProven: ${result.metadata?.preferenceOptimalityProven}`)
       console.log(`combinationsExplored: ${result.metadata?.combinationsExplored}`)
       console.log(`elapsedMs: ${result.metadata?.elapsedMs?.toFixed(1)}`)
+      console.log(`phaseMs:`, result.metadata?.phaseMs)
       console.log(`validation.valid: ${validation.valid}`)
       expect(validation.valid).toBe(true)
       console.log(`sameSize alternatives: ${result.alternatives?.sameSize?.length || 0}`)
-      if (result.alternatives?.oneFewer) {
-        console.log(
-          `oneFewer: ${result.alternatives.oneFewer.filmCount} films · ` +
-            `adds=${result.alternatives.oneFewer.adds.map(a => a.title).join('|') || '—'} · ` +
-            `drops=${result.alternatives.oneFewer.drops.map(d => d.title).join('|') || '—'}`
-        )
-      } else {
-        console.log('oneFewer: none')
-      }
+      expect(result.alternatives?.oneFewer).toBeTruthy()
+      expect(result.alternatives.oneFewer.filmCount).toBe(result.filmCount - 1)
+      console.log(
+        `oneFewer: ${result.alternatives.oneFewer.filmCount} films · ` +
+          `adds=${result.alternatives.oneFewer.adds.map(a => a.title).join('|') || '—'} · ` +
+          `drops=${result.alternatives.oneFewer.drops.map(d => d.title).join('|') || '—'}`
+      )
 
       const unrestricted = generatePlanV3({
         films,
@@ -91,18 +91,45 @@ describe('verify:planner', () => {
       })
 
       console.log('--- Unrestricted (no ratings) ---')
-      console.log(`filmCount: ${unrestricted.filmCount}`)
-      console.log(`optimalityProven: ${unrestricted.metadata?.optimalityProven}`)
-      console.log(`status: ${unrestricted.metadata?.status}`)
-      console.log(`elapsedMs: ${unrestricted.metadata?.elapsedMs?.toFixed(1)}`)
+      const dm = unrestricted.metadata?.dailyMaxima || {}
+      const dayLabels = {
+        '2026-10-14': 'Wed',
+        '2026-10-15': 'Thu',
+        '2026-10-16': 'Fri',
+        '2026-10-17': 'Sat',
+        '2026-10-18': 'Sun'
+      }
+      console.log('Daily maxima:')
+      for (const [date, label] of Object.entries(dayLabels)) {
+        console.log(`${label} ${dm[date] ?? '?'}`)
+      }
+      console.log(`Global count upper bound: ${unrestricted.metadata?.globalCountUpperBound}`)
+      console.log(`Best plan: ${unrestricted.filmCount}`)
+      console.log(`Max film count proven: ${unrestricted.metadata?.maxFilmCountProven}`)
       console.log(
-        `NOTE: ${unrestricted.filmCount} films is Best found` +
-          (unrestricted.metadata?.optimalityProven
-            ? ' and Maximum proven'
-            : ' — NOT proven optimal within this budget')
+        `Preference optimality proven: ${unrestricted.metadata?.preferenceOptimalityProven}`
       )
+      console.log(`Best 23-film alternative: ${unrestricted.alternatives?.oneFewer?.filmCount ?? 'none'}`)
+      console.log(`phaseMs:`, unrestricted.metadata?.phaseMs)
+      console.log(`elapsedMs: ${unrestricted.metadata?.elapsedMs?.toFixed(1)}`)
 
       expect(unrestricted.filmCount).toBe(24)
+      expect(unrestricted.metadata.maxFilmCountProven).toBe(true)
+      expect(unrestricted.metadata.globalCountUpperBound).toBe(24)
+      expect(unrestricted.alternatives.oneFewer).toBeTruthy()
+      expect(unrestricted.alternatives.oneFewer.filmCount).toBe(23)
+      expect(validatePlan(unrestricted, films, screenings).valid).toBe(true)
+      expect(
+        validatePlan(
+          {
+            screenings: unrestricted.alternatives.oneFewer.screenings,
+            filmCount: 23
+          },
+          films,
+          screenings
+        ).valid
+      ).toBe(true)
+
       console.log('OK')
     }
   )

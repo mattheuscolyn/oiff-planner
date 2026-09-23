@@ -411,9 +411,31 @@
   color: #744210;
 }
 
+.optimality-sub {
+  display: block;
+  font-weight: 400;
+  margin-top: 0.2rem;
+  opacity: 0.9;
+}
+
 .optimality-meta {
   font-weight: 400;
   opacity: 0.85;
+}
+
+.omitted-require-button {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  border: 1px solid #2c5282;
+  background: #ebf8ff;
+  color: #2c5282;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.omitted-require-button:hover {
+  background: #bee3f8;
 }
 
 .progress-hint {
