@@ -272,11 +272,66 @@
   background: #eef6fc;
 }
 
-.screening-time {
-  font-weight: 700;
-  font-size: 1rem;
+.plan-day {
+  margin-bottom: 1.5rem;
+}
+
+.day-header {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
   color: #2c3e50;
-  min-width: 4rem;
+}
+
+.day-screenings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.plan-screening {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem;
+  background: #fff;
+  border: 1px solid #e1e8ed;
+  border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+  .plan-screening {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "poster film"
+      "time time"
+      "actions actions";
+  }
+
+  .plan-screening-poster { grid-area: poster; }
+  .plan-screening .screening-time { grid-area: time; }
+  .plan-screening .screening-film { grid-area: film; }
+  .plan-screening .screening-actions { grid-area: actions; justify-content: flex-start; }
+}
+
+.plan-screening .screening-time {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 4.5rem;
+}
+
+.plan-screening .screening-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.plan-screening .action-btn {
+  width: auto;
+  height: auto;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.75rem;
 }
 
 .screening-info {

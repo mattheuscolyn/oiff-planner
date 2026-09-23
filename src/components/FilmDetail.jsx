@@ -7,6 +7,7 @@ import {
 } from '../utils/festivalData'
 import { INTEREST_LEVELS } from '../utils/userState'
 import { useUserState } from '../contexts/UserStateContext'
+import FilmPoster from './FilmPoster'
 import './FilmDetail.css'
 
 function FilmDetail({ film, onClose }) {
@@ -75,14 +76,17 @@ function FilmDetail({ film, onClose }) {
         </button>
 
         <div className="detail-header">
-          <h2 id="film-detail-title" className="detail-title">{film.title}</h2>
-          <div className="detail-meta">
-            {film.year} • {film.runtime} minutes
+          <FilmPoster film={film} size="detail" lazy={false} className="detail-poster" />
+          <div className="detail-header-text">
+            <h2 id="film-detail-title" className="detail-title">{film.title}</h2>
+            <div className="detail-meta">
+              {film.year} • {film.runtime} minutes
+            </div>
+            <div className="detail-credits">
+              Directed by {film.director}
+            </div>
+            <div className="detail-country">{film.country}</div>
           </div>
-          <div className="detail-credits">
-            Directed by {film.director}
-          </div>
-          <div className="detail-country">{film.country}</div>
         </div>
 
         <div className="detail-synopsis">

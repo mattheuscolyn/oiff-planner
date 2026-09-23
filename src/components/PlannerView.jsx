@@ -9,14 +9,17 @@ import {
   DEFAULT_TIME_BUDGET_MS
 } from '../planner/generateCurrentPlan'
 import { generateCurrentPlanAsync } from '../planner/runPlanInWorker'
+import { resolveConflictChoice } from '../planner/conflictResolution'
 import { INTEREST_LEVELS } from '../utils/userState'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import ErrorBoundary from './ErrorBoundary'
+import RequiredConflictView from './RequiredConflictView'
+import FilmPoster from './FilmPoster'
 import './PlannerView.css'
 
 function PlannerViewInner() {
-  const { interests } = useUserState()
+  const { interests, updateFilmInterest } = useUserState()
   const {
     constraints,
     arrival,
@@ -32,7 +35,7 @@ function PlannerViewInner() {
   const [generationError, setGenerationError] = useState(null)
   const abortRef = useRef(null)
 
-  const runPlanGeneration = (constraintOverrides = {}) => {
+  const runPlanGeneration = (constraintOverrides = {}, interestOverrides = null) => {
     if (abortRef.current) {
       abortRef.current.abort()
     }
@@ -46,7 +49,7 @@ function PlannerViewInner() {
     generateCurrentPlanAsync({
       films,
       screenings,
-      interests,
+      interests: interestOverrides || interests,
       constraints,
       arrival,
       departure,
@@ -96,7 +99,6 @@ function PlannerViewInner() {
   }
 
   const handleRequireFilm = (filmId) => {
-    // Must is already required via rating — no-op for storage
     if (interests[filmId] === INTEREST_LEVELS.MUST_SEE) return
     const newRequired = appendUniqueId(constraints.requiredFilms, filmId)
     updateConstraints({ requiredFilms: newRequired })
@@ -104,14 +106,44 @@ function PlannerViewInner() {
   }
 
   const handleUnrequireFilm = (filmId) => {
-    // Cannot unrequire a Must via this action
     if (interests[filmId] === INTEREST_LEVELS.MUST_SEE) return
     const newRequired = removeRequiredFilm(constraints.requiredFilms, filmId)
     updateConstraints({ requiredFilms: newRequired })
     runPlanGeneration({ requiredFilms: newRequired })
   }
 
+  const applyConflictResolution = (mode, targetFilmId) => {
+    const conflictIds =
+      generatedPlan?.conflict?.filmIds ||
+      (generatedPlan?.unavailable?.filmId ? [generatedPlan.unavailable.filmId] : [])
+    if (!conflictIds.length) return
+
+    const { interestUpdates, constraintUpdates } = resolveConflictChoice({
+      mode,
+      targetFilmId,
+      conflictFilmIds: conflictIds,
+      interests,
+      constraints
+    })
+
+    for (const [filmId, level] of Object.entries(interestUpdates)) {
+      if (interests[filmId] !== level) {
+        updateFilmInterest(filmId, level)
+      }
+    }
+    updateConstraints(constraintUpdates)
+    runPlanGeneration(constraintUpdates, interestUpdates)
+  }
+
+  const handlePrioritizeFilm = (filmId) => applyConflictResolution('prioritize', filmId)
+  const handleRelaxFilm = (filmId) => applyConflictResolution('relax', filmId)
+
   const handleStartOver = () => {
+    setShowingResults(false)
+    setGeneratedPlan(null)
+  }
+
+  const handleBackToRatings = () => {
     setShowingResults(false)
     setGeneratedPlan(null)
   }
@@ -124,6 +156,11 @@ function PlannerViewInner() {
       .map(([id]) => id)
       .filter(id => !(constraints.excludedFilms || []).includes(id))
   ])
+
+  const isResolvableConflict =
+    generatedPlan?.infeasible &&
+    (generatedPlan.reasonCode === 'required-film-conflict' ||
+      generatedPlan.reasonCode === 'required-film-unavailable')
 
   return (
     <div className="planner-view">
@@ -160,11 +197,23 @@ function PlannerViewInner() {
 
           {!isGenerating && !generationError && generatedPlan && (
             generatedPlan.infeasible ? (
-              <div className="planner-error">
-                <h2>Unable to Generate Plan</h2>
-                <p>{generatedPlan.reason}</p>
-                <button onClick={handleStartOver}>Start Over</button>
-              </div>
+              isResolvableConflict ? (
+                <RequiredConflictView
+                  plan={generatedPlan}
+                  interests={interests}
+                  manualRequired={[...manualRequired]}
+                  onPrioritizeFilm={handlePrioritizeFilm}
+                  onRelaxFilm={handleRelaxFilm}
+                  onBackToRatings={handleBackToRatings}
+                  onBackToAttendance={handleStartOver}
+                />
+              ) : (
+                <div className="planner-error">
+                  <h2>Unable to Generate Plan</h2>
+                  <p>{generatedPlan.reason}</p>
+                  <button onClick={handleBackToRatings}>Back to ratings</button>
+                </div>
+              )
             ) : (
               <>
                 <div className="planner-header">
@@ -382,6 +431,7 @@ function renderPlanByDay(
 
             return (
               <div key={screening.id} className="plan-screening">
+                <FilmPoster film={film} size="thumb" className="plan-screening-poster" />
                 <div className="screening-time">
                   <strong>{formatTime(screening.startTime)}</strong>
                   <span className="venue">{screening.venue}</span>

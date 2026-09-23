@@ -1,15 +1,10 @@
 name: Enrich TMDB posters
 
+# Manual rerun only — generated poster JSON is committed to the repo.
+# Avoids push/commit loops after enrichment.
+
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/conflict-resolution-tmdb-posters
-    paths:
-      - 'scripts/enrich-tmdb-posters.mjs'
-      - 'scripts/tmdb-overrides.json'
-      - 'src/data/films.json'
-      - '.github/workflows/enrich-tmdb.yml'
 
 permissions:
   contents: write

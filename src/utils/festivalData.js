@@ -1,6 +1,9 @@
 import festivalData from '../data/films.json'
+import { enrichFilmsWithPosters } from './tmdbPosters'
 
-export const { films, screenings, venues, festivalDates } = festivalData
+const rawFilms = festivalData.films
+export const films = enrichFilmsWithPosters(rawFilms)
+export const { screenings, venues, festivalDates } = festivalData
 
 export function getFilmById(filmId) {
   return films.find(f => f.id === filmId)

@@ -55,6 +55,18 @@
 .detail-header {
   margin-bottom: 1.5rem;
   padding-right: 2rem;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.detail-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-poster {
+  flex-shrink: 0;
 }
 
 .detail-title {
