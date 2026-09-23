@@ -21,6 +21,10 @@ import {
   summarizeAlternative
 } from './planResult'
 import { diagnoseRequiredConflict } from './requiredConflict'
+import {
+  buildSlotOptions,
+  enrichOmissionsWithSlotHints
+} from './slotOptions'
 
 /** Default interactive budget — split across search phases */
 export const DEFAULT_TIME_BUDGET_MS = 20000
@@ -857,7 +861,7 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
     [...data.excludedFilmSet]
   )
   const coverage = buildCoverage(best.filmIds, interests, eligibleTotals)
-  const omissions = buildOmissions({
+  const rawOmissions = buildOmissions({
     films: data.films,
     interests,
     excludedFilms: [...data.excludedFilmSet],
@@ -867,6 +871,19 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
     planScreenings: best.screenings,
     filmMap: data.filmMap
   })
+
+  const { slotOptions, filmToReplaceableSlots } = buildSlotOptions({
+    planScreenings: best.screenings,
+    filmMap: data.filmMap,
+    filmToScreenings: data.filmToScreenings,
+    filmToFeasibleScreenings: data.filmToFeasibleScreenings,
+    interests,
+    excludedFilmIds: data.excludedFilmSet,
+    planFilmIds: best.filmIds,
+    films: data.films
+  })
+
+  const omissions = enrichOmissionsWithSlotHints(rawOmissions, filmToReplaceableSlots)
 
   const mustOmitted = omissions.filter(o => o.interest === INTEREST_LEVELS.MUST_SEE)
   if (mustOmitted.length > 0) {
@@ -879,6 +896,7 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
       coverage: null,
       omissions: mustOmitted,
       alternatives: { sameSize: [], oneFewer: null },
+      slotOptions: {},
       requiredFilmIds: data.requiredFilmIds,
       metadata: {
         maxDistinctFilms: 0,
@@ -931,6 +949,7 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
     infeasible: false,
     coverage,
     omissions,
+    slotOptions,
     alternatives: {
       sameSize,
       oneFewer

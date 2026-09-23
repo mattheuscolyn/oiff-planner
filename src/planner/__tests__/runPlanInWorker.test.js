@@ -2,7 +2,7 @@
  * Worker lifecycle: one Worker per request; abort terminates computation.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   generateCurrentPlanAsync,
   __setWorkerFactoryForTests
@@ -128,21 +128,25 @@ describe('generateCurrentPlanAsync worker lifecycle', () => {
     expect(w.terminated).toBe(true)
   })
 
-  it('cleanup is idempotent (abort after success is a no-op)', async () => {
-    const controller = new AbortController()
-    const p = generateCurrentPlanAsync({ ...baseArgs, signal: controller.signal })
-    const w = workers[0]
-    const terminateSpy = vi.spyOn(w, 'terminate')
+  it('terminates the worker on abort so a replacement pair-check can start immediately', async () => {
+    const controllerA = new AbortController()
+    const pA = generateCurrentPlanAsync({ ...baseArgs, signal: controllerA.signal })
+    const workerA = workers[0]
 
-    w.emitMessage({
+    controllerA.abort()
+    await expect(pA).rejects.toMatchObject({ name: 'AbortError' })
+    expect(workerA.terminated).toBe(true)
+
+    const controllerB = new AbortController()
+    const pB = generateCurrentPlanAsync({ ...baseArgs, signal: controllerB.signal })
+    expect(workers).toHaveLength(2)
+    expect(workers[1].terminated).toBe(false)
+
+    workers[1].emitMessage({
       type: 'result',
-      requestId: w.posted[0].requestId,
-      result: { ok: true }
+      requestId: workers[1].posted[0].requestId,
+      result: { filmCount: 23, pairCheck: true }
     })
-    await expect(p).resolves.toEqual({ ok: true })
-    expect(terminateSpy).toHaveBeenCalledTimes(1)
-
-    controller.abort()
-    expect(terminateSpy).toHaveBeenCalledTimes(1)
+    await expect(pB).resolves.toEqual({ filmCount: 23, pairCheck: true })
   })
 })

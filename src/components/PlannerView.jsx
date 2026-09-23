@@ -10,12 +10,18 @@ import {
 } from '../planner/generateCurrentPlan'
 import { generateCurrentPlanAsync } from '../planner/runPlanInWorker'
 import { resolveConflictChoice } from '../planner/conflictResolution'
+import {
+  buildPairCheckConstraintOverrides,
+  buildRequireBothUpdates,
+  shapePairCheckResult
+} from '../planner/pairCheck'
 import { INTEREST_LEVELS } from '../utils/userState'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import ErrorBoundary from './ErrorBoundary'
 import RequiredConflictView from './RequiredConflictView'
 import FilmPoster from './FilmPoster'
+import SlotOptionsPanel from './SlotOptionsPanel'
 import './PlannerView.css'
 
 function PlannerViewInner() {
@@ -33,12 +39,27 @@ function PlannerViewInner() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [searchStatus, setSearchStatus] = useState('')
   const [generationError, setGenerationError] = useState(null)
+  const [pairCheckLoading, setPairCheckLoading] = useState(false)
+  const [pairCheckTarget, setPairCheckTarget] = useState(null)
+  const [pairCheckResult, setPairCheckResult] = useState(null)
   const abortRef = useRef(null)
+  const pairAbortRef = useRef(null)
+
+  const clearPairCheck = () => {
+    setPairCheckLoading(false)
+    setPairCheckTarget(null)
+    setPairCheckResult(null)
+  }
 
   const runPlanGeneration = (constraintOverrides = {}, interestOverrides = null) => {
     if (abortRef.current) {
       abortRef.current.abort()
     }
+    if (pairAbortRef.current) {
+      pairAbortRef.current.abort()
+    }
+    clearPairCheck()
+
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -76,6 +97,84 @@ function PlannerViewInner() {
         setSearchStatus('')
         setGenerationError(error.message || 'An unexpected error occurred')
       })
+  }
+
+  const handleCanSeeBoth = (filmIdA, filmIdB) => {
+    if (!generatedPlan || generatedPlan.infeasible) return
+    if (pairAbortRef.current) {
+      pairAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    pairAbortRef.current = controller
+
+    setPairCheckTarget({ filmIdA, filmIdB })
+    setPairCheckResult(null)
+    setPairCheckLoading(true)
+
+    const overrides = buildPairCheckConstraintOverrides(
+      constraints,
+      filmIdA,
+      filmIdB,
+      interests
+    )
+
+    generateCurrentPlanAsync({
+      films,
+      screenings,
+      interests,
+      constraints,
+      arrival,
+      departure,
+      constraintOverrides: overrides,
+      timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
+      signal: controller.signal,
+      onProgress: null
+    })
+      .then(pairPlan => {
+        if (controller.signal.aborted) return
+        const filmMap = new Map(films.map(f => [f.id, f]))
+        const shaped = shapePairCheckResult({
+          currentPlan: generatedPlan,
+          pairPlan,
+          filmIdA,
+          filmIdB,
+          filmMap
+        })
+        setPairCheckResult(shaped)
+        setPairCheckLoading(false)
+      })
+      .catch(error => {
+        if (error?.name === 'AbortError' || controller.signal.aborted) return
+        console.error('Pair check failed:', error)
+        setPairCheckResult({
+          feasible: false,
+          reason: error.message || 'Pair check failed',
+          filmIdA,
+          filmIdB,
+          currentFilmCount: generatedPlan.filmCount,
+          pairFilmCount: 0,
+          filmCountDelta: null,
+          screeningA: null,
+          screeningB: null,
+          adds: [],
+          drops: []
+        })
+        setPairCheckLoading(false)
+      })
+  }
+
+  const handleRequireBoth = (filmIdA, filmIdB) => {
+    const updates = buildRequireBothUpdates(constraints, filmIdA, filmIdB, interests)
+    updateConstraints(updates)
+    clearPairCheck()
+    runPlanGeneration(updates)
+  }
+
+  const handleDismissPairCheck = () => {
+    if (pairAbortRef.current) {
+      pairAbortRef.current.abort()
+    }
+    clearPairCheck()
   }
 
   const handleBuildPlan = () => {
@@ -232,7 +331,16 @@ function PlannerViewInner() {
                   manualRequired,
                   handleRequireFilm,
                   handleUnrequireFilm,
-                  handleExcludeFilm
+                  handleExcludeFilm,
+                  generatedPlan.slotOptions,
+                  {
+                    pairCheckResult,
+                    pairCheckLoading,
+                    pairCheckTarget,
+                    onCanSeeBoth: handleCanSeeBoth,
+                    onRequireBoth: handleRequireBoth,
+                    onDismissPairCheck: handleDismissPairCheck
+                  }
                 )}
 
                 {renderOmissions(generatedPlan.omissions, handleRequireFilm)}
@@ -317,6 +425,7 @@ function renderOmissions(omissions, onRequire) {
               <span className={`interest-badge ${o.interest}`}>{formatInterest(o.interest)}</span>
             </div>
             {o.reason && <div className="omission-reason">{o.reason}</div>}
+            {o.slotHint && <div className="omission-slot-hint">{o.slotHint}</div>}
             {canRequire && (
               <button
                 type="button"
@@ -402,8 +511,19 @@ function renderPlanByDay(
   manualRequired,
   onRequire,
   onUnrequire,
-  onExclude
+  onExclude,
+  slotOptions = {},
+  pairCheck = {}
 ) {
+  const {
+    pairCheckResult,
+    pairCheckLoading,
+    pairCheckTarget,
+    onCanSeeBoth,
+    onRequireBoth,
+    onDismissPairCheck
+  } = pairCheck
+
   const byDate = {}
   planScreenings.forEach(screening => {
     if (!byDate[screening.date]) byDate[screening.date] = []
@@ -428,6 +548,9 @@ function renderPlanByDay(
             const isMust = interest === INTEREST_LEVELS.MUST_SEE
             const isRequired = effectiveRequired.has(film.id)
             const isManual = manualRequired.has(film.id)
+            const options = slotOptions?.[screening.id] || []
+            const isPairForThisRow =
+              pairCheckTarget?.filmIdA === screening.filmId
 
             return (
               <div key={screening.id} className="plan-screening">
@@ -478,6 +601,19 @@ function renderPlanByDay(
                     Exclude
                   </button>
                 </div>
+                <SlotOptionsPanel
+                  plannedScreening={screening}
+                  options={options}
+                  onRequireFilm={onRequire}
+                  onCanSeeBoth={onCanSeeBoth}
+                  pairCheck={isPairForThisRow ? pairCheckResult : null}
+                  pairCheckLoading={isPairForThisRow && pairCheckLoading}
+                  pairCheckTargetFilmId={
+                    isPairForThisRow ? pairCheckTarget?.filmIdB : null
+                  }
+                  onRequireBoth={onRequireBoth}
+                  onDismissPairCheck={onDismissPairCheck}
+                />
               </div>
             )
           })}
