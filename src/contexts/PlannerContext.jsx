@@ -4,7 +4,8 @@ import { OBJECTIVES } from '../planner/scoring'
 const PlannerContext = createContext(null)
 
 const STORAGE_KEY = 'oiff-planner-state'
-const STATE_VERSION = '5' // PR #10: Arrival/departure model replaces per-day attendance grid
+// v6: film-level requiredFilms replaces screening-level lockedScreenings
+const STATE_VERSION = '6'
 
 const DEFAULT_STATE = {
   version: STATE_VERSION,
@@ -15,29 +16,70 @@ const DEFAULT_STATE = {
     maxFilmsTotal: null,
     requiredFilms: [],
     excludedFilms: [],
-    lockedScreenings: [],
     includeSkip: false,
     includeSeen: false
   },
-  // PR #10: Simplified arrival/departure model
-  // Default: Full festival with no travel restrictions
   arrival: {
-    date: '2026-10-13', // Tuesday (day before festival)
-    type: 'already-on-island', // 'already-on-island' | 'ferry' | 'custom'
+    date: '2026-10-13',
+    type: 'already-on-island',
     ferryId: null,
     isVehicle: false,
     customTime: null
   },
   departure: {
-    date: '2026-10-19', // Monday (day after festival)
-    type: 'staying-longer', // 'staying-longer' | 'ferry' | 'custom'
+    date: '2026-10-19',
+    type: 'staying-longer',
     ferryId: null,
     isVehicle: false,
     customTime: null
   },
-  // Removed: old attendance.attendanceDays per-day grid
-  // Removed: old attendance.availabilityByDate manual per-day windows
   generatedPlan: null
+}
+
+function migrateToV6(parsed) {
+  console.log(`Migrating planner state from v${parsed.version || 'unknown'} to v${STATE_VERSION}`)
+
+  const arrival =
+    parsed.arrival ||
+    (parsed.attendance?.arrivalTravel
+      ? {
+          date: DEFAULT_STATE.arrival.date,
+          type: parsed.attendance.arrivalTravel.type || DEFAULT_STATE.arrival.type,
+          ferryId: parsed.attendance.arrivalTravel.ferryId || null,
+          isVehicle: parsed.attendance.arrivalTravel.isVehicle || false,
+          customTime: parsed.attendance.arrivalTravel.customTime || null
+        }
+      : DEFAULT_STATE.arrival)
+
+  const departure =
+    parsed.departure ||
+    (parsed.attendance?.departureTravel
+      ? {
+          date: DEFAULT_STATE.departure.date,
+          type: parsed.attendance.departureTravel.type || DEFAULT_STATE.departure.type,
+          ferryId: parsed.attendance.departureTravel.ferryId || null,
+          isVehicle: parsed.attendance.departureTravel.isVehicle || false,
+          customTime: parsed.attendance.departureTravel.customTime || null
+        }
+      : DEFAULT_STATE.departure)
+
+  // Discard screening locks — conversion is ambiguous; film-level require is explicit
+  if (parsed.constraints?.lockedScreenings?.length) {
+    console.log('Migration v6: discarding obsolete lockedScreenings')
+  }
+
+  return {
+    ...DEFAULT_STATE,
+    version: STATE_VERSION,
+    arrival,
+    departure,
+    generatedPlan: null,
+    constraints: {
+      ...DEFAULT_STATE.constraints,
+      requiredFilms: parsed.constraints?.requiredFilms || [],
+      excludedFilms: parsed.constraints?.excludedFilms || []
+    }
+  }
 }
 
 export function PlannerProvider({ children }) {
@@ -46,56 +88,31 @@ export function PlannerProvider({ children }) {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        
-        // Check version and migrate if needed
+
         if (parsed.version !== STATE_VERSION) {
-          console.log(`Migrating planner state from v${parsed.version || 'unknown'} to v${STATE_VERSION}`)
-          
-          // Migrate from old per-day attendance to arrival/departure
-          const migrated = {
-            ...DEFAULT_STATE,
-            version: STATE_VERSION,
-            // Attempt to derive arrival/departure from old attendance if present
-            arrival: parsed.attendance?.arrivalTravel 
-              ? {
-                  date: DEFAULT_STATE.arrival.date,
-                  type: parsed.attendance.arrivalTravel.type || DEFAULT_STATE.arrival.type,
-                  ferryId: parsed.attendance.arrivalTravel.ferryId || null,
-                  isVehicle: parsed.attendance.arrivalTravel.isVehicle || false,
-                  customTime: parsed.attendance.arrivalTravel.customTime || null
-                }
-              : DEFAULT_STATE.arrival,
-            departure: parsed.attendance?.departureTravel
-              ? {
-                  date: DEFAULT_STATE.departure.date,
-                  type: parsed.attendance.departureTravel.type || DEFAULT_STATE.departure.type,
-                  ferryId: parsed.attendance.departureTravel.ferryId || null,
-                  isVehicle: parsed.attendance.departureTravel.isVehicle || false,
-                  customTime: parsed.attendance.departureTravel.customTime || null
-                }
-              : DEFAULT_STATE.departure,
-            // Always clear generated plan on migration
-            generatedPlan: null,
-            constraints: {
-              ...DEFAULT_STATE.constraints,
-              // Preserve locks/exclusions if present
-              lockedScreenings: parsed.constraints?.lockedScreenings || [],
-              excludedFilms: parsed.constraints?.excludedFilms || []
-            }
-          }
-          
-          console.log('Migration v4→v5: replaced per-day attendance grid with arrival/departure')
-          
-          return migrated
+          return migrateToV6(parsed)
         }
-        
-        // Version matches — strip any obsolete wizard fields from older clients
+
         const cleaned = { ...parsed }
         delete cleaned.currentStep
         delete cleaned.hardDecisions
         delete cleaned.decisions
+        delete cleaned.constraints?.lockedScreenings
 
-        return { ...DEFAULT_STATE, ...cleaned, version: STATE_VERSION }
+        const constraints = {
+          ...DEFAULT_STATE.constraints,
+          ...cleaned.constraints,
+          requiredFilms: cleaned.constraints?.requiredFilms || [],
+          excludedFilms: cleaned.constraints?.excludedFilms || []
+        }
+        delete constraints.lockedScreenings
+
+        return {
+          ...DEFAULT_STATE,
+          ...cleaned,
+          constraints,
+          version: STATE_VERSION
+        }
       }
       return DEFAULT_STATE
     } catch (error) {
@@ -143,13 +160,12 @@ export function PlannerProvider({ children }) {
   }, [])
 
   const resetPlannerSession = useCallback(() => {
-    // Reset ONLY planner session state, NOT film ratings or My Plan
     setState(prev => ({
       ...prev,
       generatedPlan: null,
       constraints: {
         ...DEFAULT_STATE.constraints,
-        lockedScreenings: [],
+        requiredFilms: [],
         excludedFilms: []
       }
     }))

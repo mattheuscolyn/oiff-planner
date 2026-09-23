@@ -11,7 +11,8 @@
     "import:oiff": "node scripts/import-oiff-2026.mjs",
     "import:ferries": "node scripts/import-ferries-2026.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:planner": "node scripts/verify-planner.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",
