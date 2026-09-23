@@ -6,6 +6,7 @@ import FilmsView from './components/FilmsView'
 import ScheduleView from './components/ScheduleView'
 import MyPlanView from './components/MyPlanView'
 import PlannerView from './components/PlannerView'
+import TmdbAttribution from './components/TmdbAttribution'
 
 function App() {
   const [currentView, setCurrentView] = useState('films')
@@ -54,6 +55,8 @@ function App() {
             {currentView === 'planner' && <PlannerView />}
             {currentView === 'plan' && <MyPlanView />}
           </main>
+
+          <TmdbAttribution />
         </div>
       </PlannerProvider>
     </UserStateProvider>

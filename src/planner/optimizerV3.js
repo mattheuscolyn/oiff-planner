@@ -20,6 +20,7 @@ import {
   buildOmissions,
   summarizeAlternative
 } from './planResult'
+import { diagnoseRequiredConflict } from './requiredConflict'
 
 /** Default interactive budget — split across search phases */
 export const DEFAULT_TIME_BUDGET_MS = 20000
@@ -62,23 +63,14 @@ export function generatePlanV3(config) {
     requiredResolution.requiredFilmIds
   )
 
-  for (const filmId of data.requiredFilmIds) {
-    const feasible = data.filmToFeasibleScreenings.get(filmId) || []
-    if (feasible.length === 0) {
-      const film = data.filmMap.get(filmId)
-      return infeasibleResult(
-        `Required film "${film?.title || filmId}" has no screening within your attendance window.`,
-        startTime,
-        { requiredFilmIds: data.requiredFilmIds }
-      )
-    }
-  }
-
-  const requiredFeasible = checkRequiredFeasibility(data)
-  if (!requiredFeasible.ok) {
-    return infeasibleResult(requiredFeasible.reason, startTime, {
+  const requiredDiagnosis = diagnoseRequiredConflict(data, screeningsOverlapMinutes)
+  if (!requiredDiagnosis.ok) {
+    return infeasibleResult(requiredDiagnosis.reason, startTime, {
+      reasonCode: requiredDiagnosis.reasonCode,
+      conflict: requiredDiagnosis.conflict,
+      unavailable: requiredDiagnosis.unavailable,
       requiredFilmIds: data.requiredFilmIds,
-      conflictingRequired: requiredFeasible.conflicting
+      conflictingRequired: requiredDiagnosis.conflict?.filmIds || null
     })
   }
 
@@ -236,6 +228,9 @@ function infeasibleResult(reason, startTime, extra = {}) {
     filmCount: 0,
     infeasible: true,
     reason,
+    reasonCode: extra.reasonCode || 'infeasible',
+    conflict: extra.conflict || null,
+    unavailable: extra.unavailable || null,
     coverage: null,
     omissions: [],
     alternatives: { sameSize: [], oneFewer: null },
@@ -324,54 +319,6 @@ function precomputeData(
     availabilityByDate,
     interests,
     films
-  }
-}
-
-/**
- * Backtracking: can we pick one feasible screening per required film with no overlaps?
- */
-function checkRequiredFeasibility(data) {
-  const ids = data.requiredFilmIds
-  if (ids.length === 0) return { ok: true }
-
-  const options = ids.map(id => data.filmToFeasibleScreenings.get(id) || [])
-
-  let conflicting = null
-
-  function search(index, chosen) {
-    if (index >= options.length) return true
-
-    for (const screening of options[index]) {
-      const film = data.filmMap.get(screening.filmId)
-      let ok = true
-      for (const prev of chosen) {
-        const prevFilm = data.filmMap.get(prev.filmId)
-        if (screeningsOverlapMinutes(screening, prev, film, prevFilm)) {
-          ok = false
-          conflicting = [screening.filmId, prev.filmId]
-          break
-        }
-      }
-      if (!ok) continue
-      chosen.push(screening)
-      if (search(index + 1, chosen)) return true
-      chosen.pop()
-    }
-    return false
-  }
-
-  if (search(0, [])) return { ok: true }
-
-  const titles = (conflicting || ids.slice(0, 2))
-    .map(id => data.filmMap.get(id)?.title || id)
-    .join(' and ')
-
-  return {
-    ok: false,
-    conflicting: conflicting || ids,
-    reason:
-      `No schedule can include all required films` +
-      (conflicting ? ` (${titles} conflict).` : '.')
   }
 }
 
