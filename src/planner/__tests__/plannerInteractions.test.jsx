@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { generateCurrentPlan, appendUniqueId } from '../generateCurrentPlan'
+import { generateCurrentPlan, appendUniqueId, removeLocksForFilm } from '../generateCurrentPlan'
 import * as optimizerV3 from '../optimizerV3'
 import { films, screenings } from '../../utils/festivalData'
 import { getFerries, resolveFerryIdForDateChange } from '../../utils/ferryData'
@@ -126,6 +126,56 @@ describe('generateCurrentPlan shared path', () => {
 
     expect(regenerated.infeasible).toBe(false)
     expect(regenerated.screenings.some(s => s.filmId === filmId)).toBe(false)
+  }, 60000)
+
+  it('Exclude of a locked film drops the lock and regenerates once without that film', () => {
+    const base = generateCurrentPlan({
+      films,
+      screenings,
+      interests: {},
+      constraints: EMPTY_CONSTRAINTS,
+      arrival: DEFAULT_ARRIVAL,
+      departure: DEFAULT_DEPARTURE,
+      timeBudgetMs: 15000
+    })
+
+    const locked = base.screenings[0]
+    const filmId = locked.filmId
+    const lockedIds = [locked.id]
+
+    const newExcluded = appendUniqueId([], filmId)
+    const newLocked = removeLocksForFilm(lockedIds, filmId, screenings)
+    expect(newLocked).toEqual([])
+
+    const spy = vi.spyOn(optimizerV3, 'generatePlanV3')
+
+    const regenerated = generateCurrentPlan({
+      films,
+      screenings,
+      interests: {},
+      constraints: {
+        ...EMPTY_CONSTRAINTS,
+        lockedScreenings: lockedIds
+      },
+      arrival: DEFAULT_ARRIVAL,
+      departure: DEFAULT_DEPARTURE,
+      constraintOverrides: {
+        excludedFilms: newExcluded,
+        lockedScreenings: newLocked
+      },
+      timeBudgetMs: 15000
+    })
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][0].constraints.excludedFilms).toContain(filmId)
+    expect(spy.mock.calls[0][0].constraints.lockedScreenings).not.toContain(locked.id)
+    expect(regenerated.infeasible).toBe(false)
+    expect(regenerated.screenings.some(s => s.filmId === filmId)).toBe(false)
+
+    const validation = validatePlan(regenerated, films, screenings)
+    expect(validation.valid, validation.errors.join('\n')).toBe(true)
+
+    spy.mockRestore()
   }, 60000)
 
   it('Lock recomputes successfully and locked screening remains present', () => {

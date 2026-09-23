@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { films, screenings } from '../utils/festivalData'
 import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
-import { generateCurrentPlan, appendUniqueId } from '../planner/generateCurrentPlan'
+import { generateCurrentPlan, appendUniqueId, removeLocksForFilm } from '../planner/generateCurrentPlan'
 import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import ErrorBoundary from './ErrorBoundary'
@@ -98,8 +98,20 @@ function PlannerViewInner() {
   
   const handleExcludeFilm = (filmId) => {
     const newExcluded = appendUniqueId(constraints.excludedFilms, filmId)
-    updateConstraints({ excludedFilms: newExcluded })
-    runPlanGeneration({ excludedFilms: newExcluded })
+    // Exclude wins: drop any locks for this film in the same update
+    const newLocked = removeLocksForFilm(
+      constraints.lockedScreenings,
+      filmId,
+      screenings
+    )
+    updateConstraints({
+      excludedFilms: newExcluded,
+      lockedScreenings: newLocked
+    })
+    runPlanGeneration({
+      excludedFilms: newExcluded,
+      lockedScreenings: newLocked
+    })
   }
   
   const handleLockScreening = (screeningId) => {

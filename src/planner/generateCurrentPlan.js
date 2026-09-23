@@ -62,3 +62,18 @@ export function appendUniqueId(list = [], id) {
   if (list.includes(id)) return [...list]
   return [...list, id]
 }
+
+/**
+ * Remove locked screenings that belong to the given film (Exclude wins).
+ * @param {string[]} lockedScreenings
+ * @param {string} filmId
+ * @param {Array} allScreenings
+ * @returns {string[]}
+ */
+export function removeLocksForFilm(lockedScreenings = [], filmId, allScreenings) {
+  const screeningMap = new Map(allScreenings.map(s => [s.id, s]))
+  return lockedScreenings.filter(id => {
+    const screening = screeningMap.get(id)
+    return screening && screening.filmId !== filmId
+  })
+}

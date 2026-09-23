@@ -80,49 +80,21 @@ function precomputeData(films, screenings, interests, constraints, attendanceCon
   const screeningsByDay = new Map()
   const filmToFeasibleScreenings = new Map()
   const lockedScreeningSet = new Set(lockedScreenings)
+  const excludedFilmSet = new Set(excludedFilms)
 
   for (const film of films) {
     // Skip excluded films
-    if (excludedFilms.includes(film.id)) continue
+    if (excludedFilmSet.has(film.id)) continue
 
     const interest = interests[film.id]
     if (!includeSkip && interest === INTEREST_LEVELS.SKIP) continue
     if (!includeSeen && interest === INTEREST_LEVELS.SEEN) continue
 
-    // Get feasible screenings
+    // Get feasible screenings — locks do NOT bypass attendance availability
     const filmScreenings = filmToScreenings.get(film.id) || []
-    const feasibleScreenings = filmScreenings.filter(s => {
-      // Locked screenings are always feasible
-      if (lockedScreeningSet.has(s.id)) return true
-      
-      // Check attendance day
-      if (!attendanceDays[s.date]) return false
-
-      // Check time availability - enforce EACH constraint independently
-      const dayAvail = availabilityByDate[s.date]
-      if (dayAvail) {
-        const screeningStart = getScreeningStartMinutes(s)
-        const screeningEnd = getScreeningEndMinutes(s, film)
-        
-        // Check 'from' constraint if present
-        if (dayAvail.from) {
-          const availFrom = parseTimeToMinutes(dayAvail.from)
-          if (screeningStart < availFrom) {
-            return false
-          }
-        }
-        
-        // Check 'until' constraint if present
-        if (dayAvail.until) {
-          const availUntil = parseTimeToMinutes(dayAvail.until)
-          if (screeningEnd > availUntil) {
-            return false
-          }
-        }
-      }
-
-      return true
-    })
+    const feasibleScreenings = filmScreenings.filter(s =>
+      isScreeningWithinAttendance(s, film, attendanceDays, availabilityByDate)
+    )
 
     if (feasibleScreenings.length > 0) {
       candidateFilms.push(film)
@@ -147,7 +119,9 @@ function precomputeData(films, screenings, interests, constraints, attendanceCon
     candidateScreenings: Array.from(screeningsByDay.values()).flat(),
     screeningsByDay,
     lockedScreeningSet,
+    excludedFilmSet,
     attendanceDays,
+    availabilityByDate,
     interests
   }
 }
@@ -408,6 +382,7 @@ function findOptimalGlobalCombination(dailySchedules, data, interests, timeBudge
 
 /**
  * Resolve locked screening IDs into objects and reject incompatible lock sets.
+ * Locks must satisfy current attendance availability; Exclude wins over Lock.
  */
 function resolveLockedScreenings(data) {
   const lockedIds = Array.from(data.lockedScreeningSet)
@@ -434,11 +409,30 @@ function resolveLockedScreenings(data) {
     }
   }
 
+  // Defensive: Exclude wins — drop locks for excluded films (stale localStorage)
+  const afterExclude = lockedScreenings.filter(
+    s => !data.excludedFilmSet.has(s.filmId)
+  )
+
+  // Validate remaining locks against current attendance availability
+  for (const screening of afterExclude) {
+    const film = data.filmMap.get(screening.filmId)
+    const issue = lockedScreeningAvailabilityIssue(
+      screening,
+      film,
+      data.attendanceDays,
+      data.availabilityByDate
+    )
+    if (issue) {
+      return { infeasible: true, reason: issue }
+    }
+  }
+
   // Mutually incompatible locks → explicit infeasible (never return an invalid plan)
-  for (let i = 0; i < lockedScreenings.length; i++) {
-    for (let j = i + 1; j < lockedScreenings.length; j++) {
-      const a = lockedScreenings[i]
-      const b = lockedScreenings[j]
+  for (let i = 0; i < afterExclude.length; i++) {
+    for (let j = i + 1; j < afterExclude.length; j++) {
+      const a = afterExclude[i]
+      const b = afterExclude[j]
 
       if (a.filmId === b.filmId) {
         return {
@@ -458,7 +452,72 @@ function resolveLockedScreenings(data) {
     }
   }
 
-  return { infeasible: false, lockedScreenings }
+  return { infeasible: false, lockedScreenings: afterExclude }
+}
+
+/**
+ * Return a reason string if the locked screening is outside current availability.
+ */
+function lockedScreeningAvailabilityIssue(screening, film, attendanceDays, availabilityByDate) {
+  if (!attendanceDays[screening.date]) {
+    return (
+      `Locked screening ${screening.id} is outside current availability ` +
+      `(not an attendance day: ${screening.date})`
+    )
+  }
+
+  const dayAvail = availabilityByDate?.[screening.date]
+  if (!dayAvail) return null
+
+  const screeningStart = getScreeningStartMinutes(screening)
+  const screeningEnd = getScreeningEndMinutes(screening, film)
+
+  if (dayAvail.from) {
+    const availFrom = parseTimeToMinutes(dayAvail.from)
+    if (screeningStart < availFrom) {
+      return (
+        `Locked screening ${screening.id} is outside current availability ` +
+        `(starts before ${dayAvail.from})`
+      )
+    }
+  }
+
+  if (dayAvail.until) {
+    const availUntil = parseTimeToMinutes(dayAvail.until)
+    if (screeningEnd > availUntil) {
+      return (
+        `Locked screening ${screening.id} is outside current availability ` +
+        `(ends after ${dayAvail.until})`
+      )
+    }
+  }
+
+  return null
+}
+
+/**
+ * Shared attendance check used for candidates and locks.
+ */
+function isScreeningWithinAttendance(screening, film, attendanceDays, availabilityByDate) {
+  if (!attendanceDays[screening.date]) return false
+
+  const dayAvail = availabilityByDate?.[screening.date]
+  if (!dayAvail) return true
+
+  const screeningStart = getScreeningStartMinutes(screening)
+  const screeningEnd = getScreeningEndMinutes(screening, film)
+
+  if (dayAvail.from) {
+    const availFrom = parseTimeToMinutes(dayAvail.from)
+    if (screeningStart < availFrom) return false
+  }
+
+  if (dayAvail.until) {
+    const availUntil = parseTimeToMinutes(dayAvail.until)
+    if (screeningEnd > availUntil) return false
+  }
+
+  return true
 }
 
 /**
