@@ -50,7 +50,7 @@ describe('Planner State Migration - Decisions Removal', () => {
 
     // Verify migration
     const migrated = JSON.parse(localStorage.getItem('oiff-planner-state'))
-    expect(migrated.version).toBe('5')
+    expect(migrated.version).toBe('6')
     expect(migrated.hardDecisions).toBeUndefined()
     expect(migrated.generatedPlan).toBeNull()
     expect(migrated.arrival).toBeDefined()
@@ -124,7 +124,7 @@ describe('Planner State Migration - Decisions Removal', () => {
 
     const migrated = JSON.parse(localStorage.getItem('oiff-planner-state'))
     
-    expect(migrated.version).toBe('5')
+    expect(migrated.version).toBe('6')
     expect(migrated.hardDecisions).toBeUndefined()
     // v5 replaces per-day attendance with arrival/departure (travel prefs carried forward)
     expect(migrated.attendance).toBeUndefined()
@@ -253,7 +253,7 @@ describe('Planner Constraints - Post Migration', () => {
     unmount()
   })
 
-  it('9. locks still work after migration', () => {
+  it('9. screening locks are discarded on migration to film-level requiredFilms', () => {
     const oldState = {
       version: '3',
       hardDecisions: {},
@@ -274,8 +274,10 @@ describe('Planner Constraints - Post Migration', () => {
 
     const migrated = JSON.parse(localStorage.getItem('oiff-planner-state'))
     
-    // Locks should be preserved
-    expect(migrated.constraints.lockedScreenings).toEqual(['s1', 's2'])
+    // Screening locks discarded in v6
+    expect(migrated.constraints.lockedScreenings).toBeUndefined()
+    expect(migrated.constraints.requiredFilms).toEqual([])
+    expect(migrated.version).toBe('6')
 
     unmount()
   })

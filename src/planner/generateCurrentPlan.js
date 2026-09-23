@@ -1,21 +1,10 @@
-import { generatePlanV3 } from './optimizerV3'
+import { generatePlanV3, DEFAULT_TIME_BUDGET_MS } from './optimizerV3'
 import { deriveFestivalAvailability } from '../utils/festivalAvailability'
 import { getFerries } from '../utils/ferryData'
+import { resolveRequiredFilms } from './requiredFilms'
 
 /**
  * Single shared path for every planner regeneration.
- * Always re-derives attendance from current arrival/departure + ferries.
- *
- * @param {object} options
- * @param {Array} options.films
- * @param {Array} options.screenings
- * @param {object} options.interests
- * @param {object} options.constraints - current planner constraints
- * @param {object} options.arrival
- * @param {object} options.departure
- * @param {object} [options.constraintOverrides={}] - merged over constraints for this run
- * @param {number} [options.timeBudgetMs=750]
- * @returns {object} generatePlanV3 result
  */
 export function generateCurrentPlan({
   films,
@@ -25,7 +14,8 @@ export function generateCurrentPlan({
   arrival,
   departure,
   constraintOverrides = {},
-  timeBudgetMs = 750
+  timeBudgetMs = DEFAULT_TIME_BUDGET_MS,
+  onProgress = null
 }) {
   const ferries = getFerries()
   const { attendanceDays, availabilityByDate } = deriveFestivalAvailability(
@@ -39,6 +29,9 @@ export function generateCurrentPlan({
     ...constraintOverrides
   }
 
+  // Drop obsolete screening locks if somehow still present
+  delete mergedConstraints.lockedScreenings
+
   return generatePlanV3({
     films,
     screenings,
@@ -48,32 +41,30 @@ export function generateCurrentPlan({
       attendanceDays,
       availabilityByDate
     },
-    timeBudgetMs
+    timeBudgetMs,
+    onProgress
   })
 }
 
-/**
- * Append an id to a list without duplicates.
- * @param {string[]} list
- * @param {string} id
- * @returns {string[]}
- */
 export function appendUniqueId(list = [], id) {
   if (list.includes(id)) return [...list]
   return [...list, id]
 }
 
 /**
- * Remove locked screenings that belong to the given film (Exclude wins).
- * @param {string[]} lockedScreenings
- * @param {string} filmId
- * @param {Array} allScreenings
- * @returns {string[]}
+ * Remove a film from the manual requiredFilms list.
  */
-export function removeLocksForFilm(lockedScreenings = [], filmId, allScreenings) {
-  const screeningMap = new Map(allScreenings.map(s => [s.id, s]))
-  return lockedScreenings.filter(id => {
-    const screening = screeningMap.get(id)
-    return screening && screening.filmId !== filmId
-  })
+export function removeRequiredFilm(requiredFilms = [], filmId) {
+  return requiredFilms.filter(id => id !== filmId)
 }
+
+/**
+ * When excluding a film, also clear any manual require override.
+ */
+export function applyExcludeFilm(constraints, filmId) {
+  const excludedFilms = appendUniqueId(constraints.excludedFilms, filmId)
+  const requiredFilms = removeRequiredFilm(constraints.requiredFilms, filmId)
+  return { excludedFilms, requiredFilms }
+}
+
+export { resolveRequiredFilms, DEFAULT_TIME_BUDGET_MS }
