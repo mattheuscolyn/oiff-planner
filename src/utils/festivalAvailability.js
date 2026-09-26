@@ -86,7 +86,10 @@ function calculateEarliestAvailability(arrival, ferries) {
   }
   
   if (type === 'ferry' && ferryId) {
-    const ferry = getFerryById(ferryId, ferries)
+    const ferry = getFerryById(ferryId, ferries, {
+      date: arrival.date,
+      route: 'anacortes-orcas'
+    })
     if (ferry && ferry.arrivalTime) {
       // Add island transfer buffer after ferry arrival
       return addMinutes(ferry.arrivalTime, ISLAND_TRANSFER_BUFFER)
@@ -113,7 +116,10 @@ function calculateLatestAvailability(departure, ferries) {
   }
   
   if (type === 'ferry' && ferryId) {
-    const ferry = getFerryById(ferryId, ferries)
+    const ferry = getFerryById(ferryId, ferries, {
+      date: departure.date,
+      route: 'orcas-anacortes'
+    })
     if (ferry && ferry.departureTime) {
       // Subtract terminal buffer + island transfer before ferry departure
       const terminalBuffer = isVehicle ? VEHICLE_TERMINAL_BUFFER : WALKON_TERMINAL_BUFFER
@@ -215,4 +221,61 @@ function formatDate(dateStr) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${dayNames[date.getDay()]} ${monthNames[date.getMonth()]} ${date.getDate()}`
+}
+
+function parseHHMM(timeStr) {
+  if (!timeStr || !timeStr.includes(':')) return null
+  const [h, m] = timeStr.split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  return h * 60 + m
+}
+
+/**
+ * Why a published screening is / isn't attendance-valid.
+ * Shared by planner diagnosis UI so we never hardcode "outside" for every row.
+ *
+ * @returns {{ code: string, label: string, eligible: boolean }}
+ */
+export function classifyScreeningVsAttendance(screening, film, attendanceDays, availabilityByDate) {
+  if (/school screening/i.test(screening?.name || '')) {
+    return {
+      code: 'school',
+      label: 'School screening (not available for festival planning)',
+      eligible: false
+    }
+  }
+  if (!attendanceDays?.[screening.date]) {
+    return {
+      code: 'outside-day',
+      label: 'Outside your attendance dates',
+      eligible: false
+    }
+  }
+  const dayAvail = availabilityByDate?.[screening.date]
+  const start = parseHHMM(screening.startTime)
+  let end = screening.endTime ? parseHHMM(screening.endTime) : null
+  if (end == null && film?.runtime != null && start != null) {
+    end = start + film.runtime
+  }
+  if (dayAvail?.from) {
+    const from = parseHHMM(dayAvail.from)
+    if (from != null && start != null && start < from) {
+      return {
+        code: 'before-arrival',
+        label: `Starts before you are available (${dayAvail.from})`,
+        eligible: false
+      }
+    }
+  }
+  if (dayAvail?.until) {
+    const until = parseHHMM(dayAvail.until)
+    if (until != null && end != null && end > until) {
+      return {
+        code: 'after-departure',
+        label: `Ends after you must leave (${dayAvail.until})`,
+        eligible: false
+      }
+    }
+  }
+  return { code: 'ok', label: 'Within your attendance window', eligible: true }
 }
