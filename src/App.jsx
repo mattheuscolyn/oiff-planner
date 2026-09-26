@@ -52,7 +52,14 @@ function App() {
           <main className="app-main">
             {currentView === 'films' && <FilmsView />}
             {currentView === 'schedule' && <ScheduleView />}
-            {currentView === 'planner' && <PlannerView />}
+            {currentView === 'planner' && (
+              <PlannerView
+                onPlanApplied={(count) => {
+                  setCurrentView('plan')
+                  alert(`Plan applied! ${count} screenings saved to My Plan.`)
+                }}
+              />
+            )}
             {currentView === 'plan' && <MyPlanView />}
           </main>
 

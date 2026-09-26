@@ -12,6 +12,7 @@ import {
 import { INTEREST_LEVELS } from '../utils/userState'
 import { useUserState } from '../contexts/UserStateContext'
 import FilmDetail from './FilmDetail'
+import DayTimeline from './DayTimeline'
 import './MyPlanView.css'
 
 function MyPlanView() {
@@ -67,8 +68,8 @@ function MyPlanView() {
       .filter(Boolean)
 
     const interestedFilms = Object.entries(interests)
-      .filter(([, interest]) => 
-        interest === INTEREST_LEVELS.MUST_SEE || 
+      .filter(([, interest]) =>
+        interest === INTEREST_LEVELS.MUST_SEE ||
         interest === INTEREST_LEVELS.WANT_TO_SEE
       )
       .map(([filmId, interest]) => {
@@ -111,11 +112,11 @@ function MyPlanView() {
       {planByDay.length > 0 && (
         <section className="plan-scheduled">
           <h2 className="plan-section-title">My Schedule</h2>
-          
+
           {planByDay.map(day => (
             <article key={day.date} className="plan-day">
               <h3 className="plan-day-header">{formatDate(day.date)}</h3>
-              
+
               {day.stats && (
                 <div className="day-stats">
                   <span>{day.stats.count} film{day.stats.count > 1 ? 's' : ''}</span>
@@ -124,35 +125,10 @@ function MyPlanView() {
                 </div>
               )}
 
-              <div className="plan-screenings">
-                {day.screenings.map(({ screening, film, conflicts }) => (
-                  <div 
-                    key={screening.id} 
-                    className={`plan-screening ${conflicts.length > 0 ? 'has-conflict' : ''}`}
-                    onClick={() => setSelectedFilm(film)}
-                  >
-                    <div className="plan-screening-time">
-                      <div className="plan-time-start">{formatTime(screening.startTime)}</div>
-                      <div className="plan-time-end">{formatTime(getScreeningEndTime(screening))}</div>
-                    </div>
-
-                    <div className="plan-screening-info">
-                      <h4 className="plan-film-title">{film.title}</h4>
-                      <div className="plan-screening-meta">
-                        {film.runtime} min • {screening.venue}
-                      </div>
-                      {conflicts.length > 0 && (
-                        <div className="plan-conflict-warning">
-                          ⚠️ Conflicts with {conflicts.map(c => {
-                            const conflictFilm = getFilmById(c.filmId)
-                            return conflictFilm.title
-                          }).join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <DayTimeline
+                items={day.screenings}
+                onSelectFilm={setSelectedFilm}
+              />
             </article>
           ))}
         </section>
@@ -162,13 +138,13 @@ function MyPlanView() {
         <section className="plan-not-scheduled">
           <h2 className="plan-section-title">Not Currently Scheduled</h2>
           <p className="section-description">
-            Films you're interested in that aren't in your plan yet.
+            Films you&apos;re interested in that aren&apos;t in your plan yet.
           </p>
 
           <div className="not-scheduled-list">
             {notScheduled.map(({ film, interest, reason }) => (
-              <article 
-                key={film.id} 
+              <article
+                key={film.id}
                 className="not-scheduled-item"
                 onClick={() => setSelectedFilm(film)}
               >

@@ -27,11 +27,18 @@ export function UserStateProvider({ children }) {
     setSelectedScreeningIds(newSelected)
   }, [selectedScreeningIds])
 
+  const setSelectedScreenings = useCallback((screeningIds) => {
+    const next = Array.isArray(screeningIds) ? [...screeningIds] : []
+    persistSelectedScreenings(next)
+    setSelectedScreeningIds(next)
+  }, [])
+
   const value = {
     interests,
     selectedScreeningIds,
     updateFilmInterest,
-    toggleScreening
+    toggleScreening,
+    setSelectedScreenings
   }
 
   return (
