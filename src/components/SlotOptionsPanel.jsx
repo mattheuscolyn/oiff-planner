@@ -112,7 +112,7 @@ function SlotOptionsPanel({
                     className="action-btn require"
                     onClick={() => onRequireFilm(opt.filmId)}
                   >
-                    Require Film
+                    Mark Must
                   </button>
                   <button
                     type="button"
@@ -221,7 +221,7 @@ export function PairCheckResult({ pairCheck, filmAId, filmBId, onRequireBoth, on
           className="action-btn require"
           onClick={() => onRequireBoth(filmAId, filmBId)}
         >
-          Require Both
+          Mark both Must
         </button>
         <button type="button" className="linkish" onClick={onDismiss}>
           Dismiss

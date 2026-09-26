@@ -11,6 +11,8 @@ import {
 } from '../slotOptions'
 import {
   buildRequireBothUpdates,
+  buildRequireBothInterestUpdates,
+  buildPairCheckInterests,
   buildPairCheckConstraintOverrides,
   shapePairCheckResult,
   shapePairCheckError,
@@ -323,38 +325,34 @@ describe('buildSlotOptions', () => {
 })
 
 describe('pairCheck helpers', () => {
-  it('buildRequireBothUpdates adds non-Must films without duplicating', () => {
-    const u = buildRequireBothUpdates(
-      { requiredFilms: ['a'] },
+  it('buildRequireBothInterestUpdates marks both films Must', () => {
+    const u = buildRequireBothInterestUpdates(
+      { a: INTEREST_LEVELS.WANT_TO_SEE, b: INTEREST_LEVELS.MAYBE },
       'a',
-      'b',
-      { a: INTEREST_LEVELS.WANT_TO_SEE, b: INTEREST_LEVELS.MAYBE }
+      'b'
     )
-    expect(u.requiredFilms).toEqual(['a', 'b'])
+    expect(u.a).toBe(INTEREST_LEVELS.MUST_SEE)
+    expect(u.b).toBe(INTEREST_LEVELS.MUST_SEE)
   })
 
-  it('buildRequireBothUpdates skips Must films (already required via ratings)', () => {
-    const u = buildRequireBothUpdates(
-      { requiredFilms: [] },
-      'must',
-      'want',
-      { must: INTEREST_LEVELS.MUST_SEE, want: INTEREST_LEVELS.WANT_TO_SEE }
-    )
-    expect(u.requiredFilms).toEqual(['want'])
-    expect(u.requiredFilms).not.toContain('must')
-  })
-
-  it('temporary pair overrides match require-both updates', () => {
-    const c = { requiredFilms: [], excludedFilms: [] }
-    expect(
-      buildPairCheckConstraintOverrides(c, 'x', 'y', {
-        x: INTEREST_LEVELS.MAYBE,
-        y: INTEREST_LEVELS.WANT_TO_SEE
-      })
-    ).toEqual(buildRequireBothUpdates(c, 'x', 'y', {
+  it('buildPairCheckInterests matches require-both interest updates', () => {
+    const interests = {
       x: INTEREST_LEVELS.MAYBE,
       y: INTEREST_LEVELS.WANT_TO_SEE
-    }))
+    }
+    expect(buildPairCheckInterests(interests, 'x', 'y')).toEqual(
+      buildRequireBothInterestUpdates(interests, 'x', 'y')
+    )
+  })
+
+  it('legacy constraint helpers always clear lists', () => {
+    expect(buildPairCheckConstraintOverrides()).toEqual({
+      requiredFilms: [],
+      excludedFilms: []
+    })
+    expect(
+      buildRequireBothUpdates({ requiredFilms: ['a'] }, 'a', 'b', {})
+    ).toEqual({ requiredFilms: [], excludedFilms: [] })
   })
 
   it('overlapping chosen screenings but alternate screening allows both → feasible', () => {
@@ -387,16 +385,20 @@ describe('pairCheck helpers', () => {
     })
     expect(current.infeasible).toBe(false)
 
-    // Require both A and B — B should shift to sb2
+    // Mark both A and B Must — B should shift to sb2
     const pair = generatePlanV3({
       films,
       screenings,
-      interests: {
-        a: INTEREST_LEVELS.WANT_TO_SEE,
-        b: INTEREST_LEVELS.MAYBE,
-        c: INTEREST_LEVELS.MAYBE
-      },
-      constraints: { excludedFilms: [], requiredFilms: ['a', 'b'] },
+      interests: buildPairCheckInterests(
+        {
+          a: INTEREST_LEVELS.WANT_TO_SEE,
+          b: INTEREST_LEVELS.MAYBE,
+          c: INTEREST_LEVELS.MAYBE
+        },
+        'a',
+        'b'
+      ),
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: attendance,
       timeBudgetMs: 3000
     })
@@ -440,8 +442,12 @@ describe('pairCheck helpers', () => {
     const pair = generatePlanV3({
       films,
       screenings,
-      interests: { a: INTEREST_LEVELS.WANT_TO_SEE, b: INTEREST_LEVELS.MAYBE },
-      constraints: { excludedFilms: [], requiredFilms: ['a', 'b'] },
+      interests: buildPairCheckInterests(
+        { a: INTEREST_LEVELS.WANT_TO_SEE, b: INTEREST_LEVELS.MAYBE },
+        'a',
+        'b'
+      ),
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: attendance,
       timeBudgetMs: 2000
     })
@@ -495,14 +501,12 @@ describe('pairCheck helpers', () => {
     const pair = generatePlanV3({
       films,
       screenings,
-      interests,
-      constraints: { excludedFilms: [], requiredFilms: ['a', 'b'] },
+      interests: buildPairCheckInterests(interests, 'a', 'b'),
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: attendance,
       timeBudgetMs: 5000
     })
     expect(pair.infeasible).toBe(false)
-    // A + B(sb2) + D = 3, but C conflicts with B on day 15 → may drop from 3 to 3 still
-    // Force a clearer drop: if current has C and A, requiring A+B drops C
     const shaped = shapePairCheckResult({
       currentPlan: {
         ...current,
@@ -578,9 +582,9 @@ describe('pairCheck helpers', () => {
       interests: {
         m1: INTEREST_LEVELS.MUST_SEE,
         m2: INTEREST_LEVELS.MUST_SEE,
-        w: INTEREST_LEVELS.WANT_TO_SEE
+        w: INTEREST_LEVELS.MUST_SEE
       },
-      constraints: { excludedFilms: [], requiredFilms: ['w'] },
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: {
         attendanceDays: { '2026-10-14': true },
         availabilityByDate: {}
@@ -601,21 +605,16 @@ describe('pairCheck helpers', () => {
     expect(shaped.conflict?.filmIds?.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('Require Both commits film-level requirements without mutating interests', () => {
+  it('Mark both Must updates interests without touching constraint lists', () => {
     const interests = {
       a: INTEREST_LEVELS.WANT_TO_SEE,
       b: INTEREST_LEVELS.MAYBE
     }
     const before = { ...interests }
-    const updates = buildRequireBothUpdates(
-      { requiredFilms: [] },
-      'a',
-      'b',
-      interests
-    )
-    expect(updates.requiredFilms).toEqual(['a', 'b'])
+    const next = buildRequireBothInterestUpdates(interests, 'a', 'b')
+    expect(next.a).toBe(INTEREST_LEVELS.MUST_SEE)
+    expect(next.b).toBe(INTEREST_LEVELS.MUST_SEE)
     expect(interests).toEqual(before)
-    expect(updates.interests).toBeUndefined()
   })
 
   it('summarizePairCheckDiff lists adds and drops', () => {

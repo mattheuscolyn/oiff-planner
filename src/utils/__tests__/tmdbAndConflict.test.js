@@ -191,10 +191,11 @@ describe('conflict resolution actions', () => {
     })
     expect(r.interestUpdates.h).toBe(INTEREST_LEVELS.MUST_SEE)
     expect(r.interestUpdates.i).toBe(INTEREST_LEVELS.WANT_TO_SEE)
-    expect(r.constraintUpdates.requiredFilms).not.toContain('i')
+    expect(r.constraintUpdates.requiredFilms).toEqual([])
+    expect(r.constraintUpdates.excludedFilms).toEqual([])
   })
 
-  it('Must over manual Want: removes require, preserves Want', () => {
+  it('Must over Want: keeps Want rating, clears legacy lists', () => {
     const r = resolveConflictChoice({
       mode: 'prioritize',
       targetFilmId: 'h',
@@ -206,10 +207,10 @@ describe('conflict resolution actions', () => {
       constraints: { requiredFilms: ['i'] }
     })
     expect(r.interestUpdates.i).toBe(INTEREST_LEVELS.WANT_TO_SEE)
-    expect(r.constraintUpdates.requiredFilms).not.toContain('i')
+    expect(r.constraintUpdates.requiredFilms).toEqual([])
   })
 
-  it('manual Want over Must: demotes Must to Want', () => {
+  it('Want over Must: promotes chosen to Must and demotes other', () => {
     const r = resolveConflictChoice({
       mode: 'prioritize',
       targetFilmId: 'i',
@@ -218,11 +219,11 @@ describe('conflict resolution actions', () => {
         h: INTEREST_LEVELS.MUST_SEE,
         i: INTEREST_LEVELS.WANT_TO_SEE
       },
-      constraints: { requiredFilms: ['i'] }
+      constraints: { requiredFilms: [] }
     })
     expect(r.interestUpdates.h).toBe(INTEREST_LEVELS.WANT_TO_SEE)
-    expect(r.constraintUpdates.requiredFilms).toContain('i')
-    expect(r.constraintUpdates.requiredFilms).not.toContain('h')
+    expect(r.interestUpdates.i).toBe(INTEREST_LEVELS.MUST_SEE)
+    expect(r.constraintUpdates.requiredFilms).toEqual([])
   })
 
   it('describePrioritizeChoice explains Must demotion', () => {

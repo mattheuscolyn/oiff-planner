@@ -4,8 +4,8 @@ import { OBJECTIVES } from '../planner/scoring'
 const PlannerContext = createContext(null)
 
 const STORAGE_KEY = 'oiff-planner-state'
-// v6: film-level requiredFilms replaces screening-level lockedScreenings
-const STATE_VERSION = '6'
+// v7: Must / Skip ratings only — clear legacy requiredFilms / excludedFilms lists
+const STATE_VERSION = '7'
 
 const DEFAULT_STATE = {
   version: STATE_VERSION,
@@ -36,7 +36,7 @@ const DEFAULT_STATE = {
   generatedPlan: null
 }
 
-function migrateToV6(parsed) {
+function migratePlannerState(parsed) {
   console.log(`Migrating planner state from v${parsed.version || 'unknown'} to v${STATE_VERSION}`)
 
   const arrival =
@@ -63,9 +63,11 @@ function migrateToV6(parsed) {
         }
       : DEFAULT_STATE.departure)
 
-  // Discard screening locks — conversion is ambiguous; film-level require is explicit
   if (parsed.constraints?.lockedScreenings?.length) {
-    console.log('Migration v6: discarding obsolete lockedScreenings')
+    console.log('Migration: discarding obsolete lockedScreenings')
+  }
+  if (parsed.constraints?.requiredFilms?.length || parsed.constraints?.excludedFilms?.length) {
+    console.log('Migration v7: discarding manual requiredFilms / excludedFilms (use Must / Skip)')
   }
 
   return {
@@ -76,8 +78,8 @@ function migrateToV6(parsed) {
     generatedPlan: null,
     constraints: {
       ...DEFAULT_STATE.constraints,
-      requiredFilms: parsed.constraints?.requiredFilms || [],
-      excludedFilms: parsed.constraints?.excludedFilms || []
+      requiredFilms: [],
+      excludedFilms: []
     }
   }
 }
@@ -90,7 +92,7 @@ export function PlannerProvider({ children }) {
         const parsed = JSON.parse(saved)
 
         if (parsed.version !== STATE_VERSION) {
-          return migrateToV6(parsed)
+          return migratePlannerState(parsed)
         }
 
         const cleaned = { ...parsed }
@@ -102,8 +104,9 @@ export function PlannerProvider({ children }) {
         const constraints = {
           ...DEFAULT_STATE.constraints,
           ...cleaned.constraints,
-          requiredFilms: cleaned.constraints?.requiredFilms || [],
-          excludedFilms: cleaned.constraints?.excludedFilms || []
+          // Never rehydrate legacy lists
+          requiredFilms: [],
+          excludedFilms: []
         }
         delete constraints.lockedScreenings
 
@@ -132,7 +135,12 @@ export function PlannerProvider({ children }) {
   const updateConstraints = useCallback((updates) => {
     setState(prev => ({
       ...prev,
-      constraints: { ...prev.constraints, ...updates }
+      constraints: {
+        ...prev.constraints,
+        ...updates,
+        requiredFilms: [],
+        excludedFilms: []
+      }
     }))
   }, [])
 

@@ -2,17 +2,12 @@ import { useState, useRef } from 'react'
 import { films, screenings } from '../utils/festivalData'
 import { useUserState } from '../contexts/UserStateContext'
 import { usePlanner } from '../contexts/PlannerContext'
-import {
-  appendUniqueId,
-  applyExcludeFilm,
-  removeRequiredFilm,
-  DEFAULT_TIME_BUDGET_MS
-} from '../planner/generateCurrentPlan'
+import { DEFAULT_TIME_BUDGET_MS } from '../planner/generateCurrentPlan'
 import { generateCurrentPlanAsync } from '../planner/runPlanInWorker'
 import { resolveConflictChoice } from '../planner/conflictResolution'
 import {
-  buildPairCheckConstraintOverrides,
-  buildRequireBothUpdates,
+  buildPairCheckInterests,
+  buildRequireBothInterestUpdates,
   shapePairCheckError,
   shapePairCheckResult
 } from '../planner/pairCheck'
@@ -112,21 +107,16 @@ function PlannerViewInner() {
     setPairCheckResult(null)
     setPairCheckLoading(true)
 
-    const overrides = buildPairCheckConstraintOverrides(
-      constraints,
-      filmIdA,
-      filmIdB,
-      interests
-    )
+    const pairInterests = buildPairCheckInterests(interests, filmIdA, filmIdB)
 
     generateCurrentPlanAsync({
       films,
       screenings,
-      interests,
+      interests: pairInterests,
       constraints,
       arrival,
       departure,
-      constraintOverrides: overrides,
+      constraintOverrides: { requiredFilms: [], excludedFilms: [] },
       timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
       signal: controller.signal,
       onProgress: null
@@ -160,10 +150,14 @@ function PlannerViewInner() {
   }
 
   const handleRequireBoth = (filmIdA, filmIdB) => {
-    const updates = buildRequireBothUpdates(constraints, filmIdA, filmIdB, interests)
-    updateConstraints(updates)
+    const nextInterests = buildRequireBothInterestUpdates(interests, filmIdA, filmIdB)
+    for (const id of [filmIdA, filmIdB]) {
+      if (interests[id] !== INTEREST_LEVELS.MUST_SEE) {
+        updateFilmInterest(id, INTEREST_LEVELS.MUST_SEE)
+      }
+    }
     clearPairCheck()
-    runPlanGeneration(updates)
+    runPlanGeneration({}, nextInterests)
   }
 
   const handleDismissPairCheck = () => {
@@ -187,24 +181,17 @@ function PlannerViewInner() {
     alert(`Plan applied! ${screeningIds.length} screenings added to My Plan.`)
   }
 
-  const handleExcludeFilm = (filmId) => {
-    const updates = applyExcludeFilm(constraints, filmId)
-    updateConstraints(updates)
-    runPlanGeneration(updates)
+  const handleSkipFilm = (filmId) => {
+    updateFilmInterest(filmId, INTEREST_LEVELS.SKIP)
+    const nextInterests = { ...interests, [filmId]: INTEREST_LEVELS.SKIP }
+    runPlanGeneration({}, nextInterests)
   }
 
-  const handleRequireFilm = (filmId) => {
+  const handleMarkMust = (filmId) => {
     if (interests[filmId] === INTEREST_LEVELS.MUST_SEE) return
-    const newRequired = appendUniqueId(constraints.requiredFilms, filmId)
-    updateConstraints({ requiredFilms: newRequired })
-    runPlanGeneration({ requiredFilms: newRequired })
-  }
-
-  const handleUnrequireFilm = (filmId) => {
-    if (interests[filmId] === INTEREST_LEVELS.MUST_SEE) return
-    const newRequired = removeRequiredFilm(constraints.requiredFilms, filmId)
-    updateConstraints({ requiredFilms: newRequired })
-    runPlanGeneration({ requiredFilms: newRequired })
+    updateFilmInterest(filmId, INTEREST_LEVELS.MUST_SEE)
+    const nextInterests = { ...interests, [filmId]: INTEREST_LEVELS.MUST_SEE }
+    runPlanGeneration({}, nextInterests)
   }
 
   const applyConflictResolution = (mode, targetFilmId) => {
@@ -242,15 +229,6 @@ function PlannerViewInner() {
     setShowingResults(false)
     setGeneratedPlan(null)
   }
-
-  const manualRequired = new Set(constraints.requiredFilms || [])
-  const effectiveRequired = new Set([
-    ...manualRequired,
-    ...Object.entries(interests)
-      .filter(([, v]) => v === INTEREST_LEVELS.MUST_SEE)
-      .map(([id]) => id)
-      .filter(id => !(constraints.excludedFilms || []).includes(id))
-  ])
 
   const isResolvableConflict =
     generatedPlan?.infeasible &&
@@ -296,7 +274,6 @@ function PlannerViewInner() {
                 <RequiredConflictView
                   plan={generatedPlan}
                   interests={interests}
-                  manualRequired={[...manualRequired]}
                   onPrioritizeFilm={handlePrioritizeFilm}
                   onRelaxFilm={handleRelaxFilm}
                   onBackToRatings={handleBackToRatings}
@@ -323,11 +300,8 @@ function PlannerViewInner() {
                 {renderPlanByDay(
                   generatedPlan.screenings,
                   interests,
-                  effectiveRequired,
-                  manualRequired,
-                  handleRequireFilm,
-                  handleUnrequireFilm,
-                  handleExcludeFilm,
+                  handleMarkMust,
+                  handleSkipFilm,
                   generatedPlan.slotOptions,
                   {
                     pairCheckResult,
@@ -339,7 +313,7 @@ function PlannerViewInner() {
                   }
                 )}
 
-                {renderOmissions(generatedPlan.omissions, handleRequireFilm)}
+                {renderOmissions(generatedPlan.omissions, handleMarkMust)}
                 {renderAlternatives(generatedPlan.alternatives)}
               </>
             )
@@ -403,17 +377,19 @@ function renderCoverageHeader(plan) {
   )
 }
 
-function renderOmissions(omissions, onRequire) {
+function renderOmissions(omissions, onMarkMust) {
   if (!omissions?.length) return null
   return (
     <div className="omitted-section">
       <h3>Not in This Plan</h3>
       <p className="omitted-explanation">Rated films that did not fit this schedule:</p>
       {omissions.map(o => {
-        const canRequire =
-          onRequire &&
+        const canMarkMust =
+          onMarkMust &&
+          o.interest !== INTEREST_LEVELS.MUST_SEE &&
           (o.interest === INTEREST_LEVELS.WANT_TO_SEE ||
-            o.interest === INTEREST_LEVELS.MAYBE)
+            o.interest === INTEREST_LEVELS.MAYBE ||
+            !o.interest)
         return (
           <div key={o.film.id} className="omitted-film">
             <div className="omitted-info">
@@ -422,13 +398,13 @@ function renderOmissions(omissions, onRequire) {
             </div>
             {o.reason && <div className="omission-reason">{o.reason}</div>}
             {o.slotHint && <div className="omission-slot-hint">{o.slotHint}</div>}
-            {canRequire && (
+            {canMarkMust && (
               <button
                 type="button"
                 className="omitted-require-button"
-                onClick={() => onRequire(o.film.id)}
+                onClick={() => onMarkMust(o.film.id)}
               >
-                Require
+                Mark Must
               </button>
             )}
           </div>
@@ -503,11 +479,8 @@ function renderAltSummary(alt) {
 function renderPlanByDay(
   planScreenings,
   interests,
-  effectiveRequired,
-  manualRequired,
-  onRequire,
-  onUnrequire,
-  onExclude,
+  onMarkMust,
+  onSkip,
   slotOptions = {},
   pairCheck = {}
 ) {
@@ -542,8 +515,6 @@ function renderPlanByDay(
             if (!film) return null
             const interest = interests[film.id]
             const isMust = interest === INTEREST_LEVELS.MUST_SEE
-            const isRequired = effectiveRequired.has(film.id)
-            const isManual = manualRequired.has(film.id)
             const options = slotOptions?.[screening.id] || []
             const isPairForThisRow =
               pairCheckTarget?.filmIdA === screening.filmId
@@ -564,43 +535,33 @@ function renderPlanByDay(
                         {formatInterest(interest)}
                       </span>
                     )}
-                    {isRequired && (
-                      <span className="required-badge">
-                        {isMust ? 'Must · Required' : 'Required'}
-                      </span>
+                    {isMust && (
+                      <span className="required-badge">Must</span>
                     )}
                   </div>
                 </div>
                 <div className="screening-actions">
-                  {isMust ? null : isManual ? (
-                    <button
-                      className="action-btn unrequire"
-                      onClick={() => onUnrequire(film.id)}
-                      title="Remove manual requirement (optimizer may drop this film)"
-                    >
-                      Unrequire
-                    </button>
-                  ) : (
+                  {!isMust && (
                     <button
                       className="action-btn require"
-                      onClick={() => onRequire(film.id)}
-                      title="Require this film (optimizer may move its screening)"
+                      onClick={() => onMarkMust(film.id)}
+                      title="Mark this film Must"
                     >
-                      Require
+                      Mark Must
                     </button>
                   )}
                   <button
                     className="action-btn exclude"
-                    onClick={() => onExclude(film.id)}
-                    title="Exclude this film"
+                    onClick={() => onSkip(film.id)}
+                    title="Mark this film Skip"
                   >
-                    Exclude
+                    Skip
                   </button>
                 </div>
                 <SlotOptionsPanel
                   plannedScreening={screening}
                   options={options}
-                  onRequireFilm={onRequire}
+                  onRequireFilm={onMarkMust}
                   onCanSeeBoth={onCanSeeBoth}
                   pairCheck={isPairForThisRow ? pairCheckResult : null}
                   pairCheckLoading={isPairForThisRow && pairCheckLoading}

@@ -91,7 +91,7 @@ function ConflictFilmCard({
             <span className={`interest-badge ${interest || 'unrated'}`}>
               {interestLabel(interest)}
             </span>
-            {isRequired && <span className="required-badge">Required</span>}
+            {isRequired && <span className="required-badge">Must</span>}
           </div>
         </div>
       </div>
@@ -135,7 +135,6 @@ function ConflictFilmCard({
 function RequiredConflictView({
   plan,
   interests,
-  manualRequired,
   onPrioritizeFilm,
   onRelaxFilm,
   onBackToRatings,
@@ -152,8 +151,8 @@ function RequiredConflictView({
         <header className="conflict-header">
           <h2>No screening during your attendance</h2>
           <p>
-            <strong>{film?.title || 'This required film'}</strong> has no showing within your
-            arrival/departure window. Relax its requirement or adjust attendance.
+            <strong>{film?.title || 'This Must film'}</strong> has no showing within your
+            arrival/departure window. Move it off Must or adjust attendance.
           </p>
         </header>
 
@@ -209,7 +208,7 @@ function RequiredConflictView({
                   className="conflict-prioritize-btn secondary"
                   onClick={() => onRelaxFilm(film.id)}
                 >
-                  Relax requirement for {film.title}
+                  Move {film.title} to Want
                 </button>
               </div>
             </article>
@@ -234,7 +233,7 @@ function RequiredConflictView({
       <div className="required-conflict-view">
         <header className="conflict-header">
           <h2>Unable to generate plan</h2>
-          <p>{plan?.reason || 'Required films cannot be scheduled together.'}</p>
+          <p>{plan?.reason || 'Must films cannot be scheduled together.'}</p>
         </header>
         <div className="conflict-secondary-actions">
           <button type="button" className="linkish" onClick={onBackToRatings}>
@@ -254,13 +253,13 @@ function RequiredConflictView({
       <header className="conflict-header">
         <h2>
           {isPair
-            ? 'Two required films can’t both fit'
-            : `${conflictFilms.length} required films can’t all fit`}
+            ? 'Two Must films can’t both fit'
+            : `${conflictFilms.length} Must films can’t all fit`}
         </h2>
         <p>
           {isPair
-            ? 'There is no combination of available screenings that lets you see both of these films. Choose which one should remain required.'
-            : 'There is no schedule that includes all of these films. Relax the requirement on one film, then we will try again.'}
+            ? 'There is no combination of available screenings that lets you see both of these films. Choose which one should stay Must.'
+            : 'There is no schedule that includes all of these Must films. Move one to Want, then we will try again.'}
         </p>
       </header>
 
@@ -268,9 +267,7 @@ function RequiredConflictView({
         {conflictFilms.map(film => {
           const entry = conflict.films.find(f => f.filmId === film.id)
           const interest = interests[film.id]
-          const isRequired =
-            interest === INTEREST_LEVELS.MUST_SEE ||
-            (manualRequired || []).includes(film.id)
+          const isRequired = interest === INTEREST_LEVELS.MUST_SEE
 
           let prioritizeCopy = null
           if (isPair) {
@@ -301,10 +298,9 @@ function RequiredConflictView({
 
       {!isPair && (
         <div className="conflict-relax-list">
-          <h3>Relax one requirement</h3>
+          <h3>Move one Must to Want</h3>
           <p>
-            Must becomes Want. A manually required Want/Maybe loses only its Require override.
-            Ratings are otherwise preserved — films stay eligible.
+            That film stays eligible and may still appear if it fits after regenerating.
           </p>
           {conflictFilms.map(film => (
             <button
@@ -313,7 +309,7 @@ function RequiredConflictView({
               className="conflict-prioritize-btn secondary"
               onClick={() => onRelaxFilm(film.id)}
             >
-              Relax requirement for {film.title}
+              Move {film.title} to Want
             </button>
           ))}
         </div>

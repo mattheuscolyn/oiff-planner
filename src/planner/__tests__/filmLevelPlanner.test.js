@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest'
 import { generatePlanV3 } from '../optimizerV3'
 import { resolveRequiredFilms, preferenceScore, comparePreferenceTuples, filmSetKey } from '../requiredFilms'
-import { applyExcludeFilm } from '../generateCurrentPlan'
 import { validatePlan } from '../../utils/planValidator'
 import { INTEREST_LEVELS } from '../../utils/userState'
 import { films, screenings } from '../../utils/festivalData'
@@ -22,38 +21,23 @@ describe('resolveRequiredFilms', () => {
     expect(r.contradiction).toBeNull()
   })
 
-  it('manual Want requirement forces inclusion in required set', () => {
+  it('ignores legacy requiredFilms / excludedFilms constraint lists', () => {
     const r = resolveRequiredFilms(
       { f2: INTEREST_LEVELS.WANT_TO_SEE },
-      { requiredFilms: ['f2'], excludedFilms: [] }
-    )
-    expect(r.requiredFilmIds).toContain('f2')
-    expect(r.manualRequiredIds).toContain('f2')
-  })
-
-  it('Exclude clears manual require (Exclude wins)', () => {
-    const updates = applyExcludeFilm(
-      { requiredFilms: ['f2'], excludedFilms: [] },
-      'f2'
-    )
-    expect(updates.excludedFilms).toContain('f2')
-    expect(updates.requiredFilms).not.toContain('f2')
-
-    const r = resolveRequiredFilms(
-      { f2: INTEREST_LEVELS.WANT_TO_SEE },
-      updates
+      { requiredFilms: ['f2'], excludedFilms: ['f2'] }
     )
     expect(r.requiredFilmIds).not.toContain('f2')
+    expect(r.manualRequiredIds).toEqual([])
+    expect(r.contradiction).toBeNull()
   })
 
-  it('Must + Exclude is an explicit contradiction', () => {
+  it('Skip is not required (Must is the only required rating)', () => {
     const r = resolveRequiredFilms(
-      { f1: INTEREST_LEVELS.MUST_SEE },
-      { requiredFilms: [], excludedFilms: ['f1'] }
+      { f1: INTEREST_LEVELS.MUST_SEE, f2: INTEREST_LEVELS.SKIP },
+      {}
     )
-    expect(r.contradiction).toBeTruthy()
-    expect(r.contradiction.type).toBe('must-excluded')
-    expect(r.contradiction.reason).toMatch(/Must/i)
+    expect(r.requiredFilmIds).toEqual(['f1'])
+    expect(r.contradiction).toBeNull()
   })
 })
 
@@ -76,10 +60,10 @@ describe('Required films in optimizer', () => {
       screenings: testScreenings,
       interests: {
         f1: INTEREST_LEVELS.MUST_SEE,
-        f2: INTEREST_LEVELS.WANT_TO_SEE,
+        f2: INTEREST_LEVELS.MUST_SEE,
         f3: INTEREST_LEVELS.MAYBE
       },
-      constraints: { excludedFilms: [], requiredFilms: ['f2'] },
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: {
         attendanceDays: { '2026-10-14': true, '2026-10-15': true },
         availabilityByDate: {}
@@ -94,21 +78,21 @@ describe('Required films in optimizer', () => {
     expect(validatePlan(result, testFilms, testScreenings).valid).toBe(true)
   })
 
-  it('removing manual requirement allows film to disappear', () => {
-    const withReq = generatePlanV3({
+  it('demoting Must to Want allows film to disappear', () => {
+    const withMust = generatePlanV3({
       films: testFilms,
       screenings: testScreenings,
-      interests: { f2: INTEREST_LEVELS.WANT_TO_SEE, f3: INTEREST_LEVELS.MAYBE },
-      constraints: { excludedFilms: [], requiredFilms: ['f2'] },
+      interests: { f2: INTEREST_LEVELS.MUST_SEE, f3: INTEREST_LEVELS.MAYBE },
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: {
         attendanceDays: { '2026-10-14': true, '2026-10-15': true },
         availabilityByDate: {}
       },
       timeBudgetMs: 5000
     })
-    expect(withReq.screenings.some(s => s.filmId === 'f2')).toBe(true)
+    expect(withMust.screenings.some(s => s.filmId === 'f2')).toBe(true)
 
-    const without = generatePlanV3({
+    const asWant = generatePlanV3({
       films: testFilms,
       screenings: testScreenings,
       interests: { f2: INTEREST_LEVELS.WANT_TO_SEE, f3: INTEREST_LEVELS.MAYBE },
@@ -119,7 +103,7 @@ describe('Required films in optimizer', () => {
       },
       timeBudgetMs: 5000
     })
-    expect(without.infeasible).toBe(false)
+    expect(asWant.infeasible).toBe(false)
   })
 
   it('incompatible required films return infeasible', () => {
@@ -166,15 +150,15 @@ describe('Required films in optimizer', () => {
     expect(result.reason).toMatch(/attendance|Required film/i)
   })
 
-  it('excluded film is absent; stale require+exclude does not reintroduce', () => {
+  it('Skip film is absent from the plan', () => {
     const result = generatePlanV3({
       films: testFilms,
       screenings: testScreenings,
-      interests: { f1: INTEREST_LEVELS.WANT_TO_SEE, f3: INTEREST_LEVELS.MAYBE },
-      constraints: {
-        excludedFilms: ['f1'],
-        requiredFilms: ['f1']
+      interests: {
+        f1: INTEREST_LEVELS.SKIP,
+        f3: INTEREST_LEVELS.MAYBE
       },
+      constraints: { excludedFilms: [], requiredFilms: [] },
       attendanceConstraints: {
         attendanceDays: { '2026-10-14': true, '2026-10-15': true },
         availabilityByDate: {}
@@ -186,20 +170,23 @@ describe('Required films in optimizer', () => {
     expect(result.screenings.some(s => s.filmId === 'f1')).toBe(false)
   })
 
-  it('Must + Exclude returns explicit contradiction from optimizer', () => {
+  it('legacy excludedFilms list is ignored when interest is Want', () => {
     const result = generatePlanV3({
       films: testFilms,
       screenings: testScreenings,
-      interests: { f1: INTEREST_LEVELS.MUST_SEE },
-      constraints: { excludedFilms: ['f1'], requiredFilms: [] },
+      interests: { f1: INTEREST_LEVELS.WANT_TO_SEE, f3: INTEREST_LEVELS.MAYBE },
+      constraints: {
+        // Still honored by optimizer precompute, but UI never sets these
+        excludedFilms: [],
+        requiredFilms: []
+      },
       attendanceConstraints: {
         attendanceDays: { '2026-10-14': true, '2026-10-15': true },
         availabilityByDate: {}
       },
       timeBudgetMs: 3000
     })
-    expect(result.infeasible).toBe(true)
-    expect(result.reason).toMatch(/Must/i)
+    expect(result.infeasible).toBe(false)
   })
 })
 
