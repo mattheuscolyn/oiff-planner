@@ -35,6 +35,7 @@ describe('Festival Availability Derivation', () => {
     expect(attendanceDays['2026-10-16']).toBe(true)
     expect(attendanceDays['2026-10-17']).toBe(true)
     expect(attendanceDays['2026-10-18']).toBe(true)
+    expect(attendanceDays['2026-10-19']).toBe(true)
     
     // No time restrictions
     expect(Object.keys(availabilityByDate).length).toBe(0)
@@ -121,18 +122,29 @@ describe('Festival Availability Derivation', () => {
 
   // Test 10: Arrival ferry availability = ferry arrival + island transfer
   it('10. arrival ferry availability = ferry arrival + island transfer', () => {
-    const arrival = { 
-      date: '2026-10-13', 
-      type: 'ferry', 
-      ferryId: 'ferry-1',
-      isVehicle: false 
+    const arrivalFerry = {
+      id: 'ferry-wed',
+      date: '2026-10-14',
+      route: 'anacortes-orcas',
+      departureTime: '11:20',
+      arrivalTime: '12:25'
+    }
+    const arrival = {
+      date: '2026-10-14',
+      type: 'ferry',
+      ferryId: 'ferry-wed',
+      isVehicle: false
     }
     const departure = { date: '2026-10-19', type: 'staying-longer' }
-    
-    const { availabilityByDate } = deriveFestivalAvailability(arrival, departure, mockFerries)
-    
+
+    const { availabilityByDate } = deriveFestivalAvailability(
+      arrival,
+      departure,
+      [...mockFerries, arrivalFerry]
+    )
+
     // Ferry arrives at 12:25, add 25 min island transfer = 12:50
-    expect(availabilityByDate['2026-10-13'].from).toBe('12:50')
+    expect(availabilityByDate['2026-10-14'].from).toBe('12:50')
   })
 
   // Test 11: Departure ferry availability = ferry departure − buffers
@@ -231,7 +243,7 @@ describe('Availability Summary Formatting', () => {
     
     const summary = formatAvailabilitySummary(arrival, departure, [])
     
-    expect(summary).toBe('Available for the full festival · Oct 14–18')
+    expect(summary).toBe('Available for the full festival · Oct 14–19')
   })
 
   it('formats partial availability with times', () => {

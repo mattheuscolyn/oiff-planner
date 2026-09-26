@@ -293,6 +293,7 @@ function precomputeData(
 
     const filmScreenings = filmToScreenings.get(film.id) || []
     const feasibleScreenings = filmScreenings.filter(s =>
+      !isSchoolScreening(s) &&
       isScreeningWithinAttendance(s, film, attendanceDays, availabilityByDate)
     )
 
@@ -1010,6 +1011,12 @@ function isScreeningWithinAttendance(screening, film, attendanceDays, availabili
     if (screeningEnd > parseTimeToMinutes(dayAvail.until)) return false
   }
   return true
+}
+
+/** School / private screenings are not general-attendance festival showtimes. */
+function isSchoolScreening(screening) {
+  const name = screening?.name || ''
+  return /school screening/i.test(name)
 }
 
 function timeToMinutes(timeStr) {

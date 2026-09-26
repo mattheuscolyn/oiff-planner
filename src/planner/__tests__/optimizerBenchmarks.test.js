@@ -11,18 +11,18 @@ import { deriveFestivalAvailability } from '../../utils/festivalAvailability'
 
 describe('Optimizer Benchmarks - Real OIFF 2026 Data', () => {
   // Test 1: Unrestricted maximum (Tuesday → Monday, no time constraints)
-  it('produces exactly 24 distinct films with unrestricted full-festival access', { timeout: 60000 }, () => {
-    // Setup: Full festival with no travel restrictions
+  it('produces exactly 26 distinct films with unrestricted full-festival access', { timeout: 60000 }, () => {
+    // Setup: Full festival with no travel restrictions (Wed–Sun + Monday encore)
     const arrival = { 
       date: '2026-10-13',  // Tuesday (before festival)
       type: 'already-on-island' 
     }
     const departure = { 
-      date: '2026-10-19',  // Monday (after festival)
+      date: '2026-10-19',  // Monday (encore day)
       type: 'staying-longer' 
     }
     
-    // Derive availability - should be Oct 14-18 with no time restrictions
+    // Derive availability - should be Oct 14-19 with no time restrictions
     const { attendanceDays, availabilityByDate } = deriveFestivalAvailability(arrival, departure, [])
     
     // Verify all festival days are included
@@ -31,6 +31,7 @@ describe('Optimizer Benchmarks - Real OIFF 2026 Data', () => {
     expect(attendanceDays['2026-10-16']).toBe(true)
     expect(attendanceDays['2026-10-17']).toBe(true)
     expect(attendanceDays['2026-10-18']).toBe(true)
+    expect(attendanceDays['2026-10-19']).toBe(true)
     
     // Verify no time restrictions
     expect(Object.keys(availabilityByDate).length).toBe(0)
@@ -56,11 +57,7 @@ describe('Optimizer Benchmarks - Real OIFF 2026 Data', () => {
     // Assertions
     expect(result).toBeDefined()
     expect(result.screenings).toBeDefined()
-    expect(result.filmCount).toBe(24) // Exact maximum
-    
-    // Note: With the current search space (~20M combinations), optimality 
-    // cannot be proven within 30s. However, 24 is the correct maximum
-    // based on independent enumeration of the real OIFF 2026 data.
+    expect(result.filmCount).toBe(26) // Exact maximum including Monday encore
     
     // Validate no overlaps
     const sortedScreenings = result.screenings.slice().sort((a, b) => {

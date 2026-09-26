@@ -136,6 +136,8 @@ export function getFestivalDates() {
     { date: '2026-10-16', label: 'Friday Oct 16', dayOfWeek: 5 },
     { date: '2026-10-17', label: 'Saturday Oct 17', dayOfWeek: 6 },
     { date: '2026-10-18', label: 'Sunday Oct 18', dayOfWeek: 0 },
+    // Public encore / shoulder-day programming (e.g. Monday Rehearsals)
+    { date: '2026-10-19', label: 'Monday Oct 19', dayOfWeek: 1 },
   ]
 }
 
