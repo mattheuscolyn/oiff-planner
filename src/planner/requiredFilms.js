@@ -1,9 +1,8 @@
 /**
  * Film-level required-set helpers for the OIFF planner.
  *
- * Required = every Must (from ratings) ∪ manual requiredFilms,
- * minus excluded films. Exclude wins over manual require.
- * Must + Exclude is an explicit contradiction.
+ * Required = every Must rating only.
+ * Skip/Seen are omitted from candidates by the optimizer (not a separate exclude list).
  */
 
 import { INTEREST_LEVELS } from '../utils/userState'
@@ -16,10 +15,7 @@ import { INTEREST_LEVELS } from '../utils/userState'
  *   contradiction: null | { type: string, filmIds: string[], reason: string }
  * }}
  */
-export function resolveRequiredFilms(interests = {}, constraints = {}) {
-  const excluded = new Set(constraints.excludedFilms || [])
-  const manual = constraints.requiredFilms || []
-
+export function resolveRequiredFilms(interests = {}, _constraints = {}) {
   const mustFilmIds = []
   for (const [filmId, interest] of Object.entries(interests)) {
     if (interest === INTEREST_LEVELS.MUST_SEE) {
@@ -27,40 +23,10 @@ export function resolveRequiredFilms(interests = {}, constraints = {}) {
     }
   }
 
-  // Must + Exclude is a contradiction — do not silently drop Musts
-  const mustExcluded = mustFilmIds.filter(id => excluded.has(id))
-  if (mustExcluded.length > 0) {
-    return {
-      requiredFilmIds: [],
-      manualRequiredIds: [],
-      mustFilmIds,
-      contradiction: {
-        type: 'must-excluded',
-        filmIds: mustExcluded,
-        reason:
-          `Cannot exclude Must film(s): ${mustExcluded.join(', ')}. ` +
-          `Change the rating from Must before excluding.`
-      }
-    }
-  }
-
-  const required = new Set()
-
-  for (const id of mustFilmIds) {
-    required.add(id)
-  }
-
-  // Manual requires — Exclude wins (Want/Maybe overrides cleared by exclude)
-  const manualRequiredIds = []
-  for (const id of manual) {
-    if (excluded.has(id)) continue
-    required.add(id)
-    manualRequiredIds.push(id)
-  }
-
   return {
-    requiredFilmIds: Array.from(required),
-    manualRequiredIds,
+    requiredFilmIds: [...mustFilmIds],
+    // Kept empty for back-compat with older UI/tests — manual require list removed.
+    manualRequiredIds: [],
     mustFilmIds,
     contradiction: null
   }

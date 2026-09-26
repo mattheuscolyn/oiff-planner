@@ -1,38 +1,41 @@
 /**
- * Temporary "Can I See Both?" pair check + Require Both helpers.
- * Does not mutate saved state — callers apply results explicitly.
+ * Temporary "Can I See Both?" pair check helpers.
+ * Pair probes use temporary Must ratings — no separate requiredFilms list.
  */
 
 import { INTEREST_LEVELS } from '../utils/userState'
-import { appendUniqueId } from './generateCurrentPlan'
 import { summarizePairCheckDiff } from './slotOptions'
 import { filmSetKey } from './requiredFilms'
 
 /**
- * Build requiredFilms list that includes both films (film-level).
+ * Interest map for a temporary pair probe (does not mutate saved ratings).
  */
-export function buildRequireBothUpdates(constraints = {}, filmIdA, filmIdB, interests = {}) {
-  let requiredFilms = [...(constraints.requiredFilms || [])]
-  for (const id of [filmIdA, filmIdB]) {
-    if (interests[id] === INTEREST_LEVELS.MUST_SEE) continue
-    requiredFilms = appendUniqueId(requiredFilms, id)
+export function buildPairCheckInterests(interests = {}, filmIdA, filmIdB) {
+  return {
+    ...interests,
+    [filmIdA]: INTEREST_LEVELS.MUST_SEE,
+    [filmIdB]: INTEREST_LEVELS.MUST_SEE
   }
-  return { requiredFilms }
 }
 
 /**
- * Constraint overrides for a temporary pair probe (no persisted mutation).
+ * Commit "Require Both" by marking both films Must.
  */
-export function buildPairCheckConstraintOverrides(constraints = {}, filmIdA, filmIdB, interests = {}) {
-  return buildRequireBothUpdates(constraints, filmIdA, filmIdB, interests)
+export function buildRequireBothInterestUpdates(interests = {}, filmIdA, filmIdB) {
+  return buildPairCheckInterests(interests, filmIdA, filmIdB)
 }
 
-function currentPlanProof(currentPlan) {
-  return !!currentPlan?.metadata?.maxFilmCountProven
+/** @deprecated Use buildRequireBothInterestUpdates — kept for test migration */
+export function buildRequireBothUpdates(_constraints = {}, filmIdA, filmIdB, interests = {}) {
+  // No constraint list anymore; callers should apply interest updates.
+  void filmIdA
+  void filmIdB
+  void interests
+  return { requiredFilms: [], excludedFilms: [] }
 }
 
-function pairPlanProof(pairPlan) {
-  return !!pairPlan?.metadata?.maxFilmCountProven
+export function buildPairCheckConstraintOverrides() {
+  return { requiredFilms: [], excludedFilms: [] }
 }
 
 /**
@@ -48,7 +51,7 @@ export function shapePairCheckResult({
   const screeningFor = (plan, filmId) =>
     (plan.screenings || []).find(s => s.filmId === filmId) || null
 
-  const currentMaxFilmCountProven = currentPlanProof(currentPlan)
+  const currentMaxFilmCountProven = !!currentPlan?.metadata?.maxFilmCountProven
 
   if (pairPlan?.infeasible) {
     return {
@@ -76,7 +79,7 @@ export function shapePairCheckResult({
 
   const { adds, drops } = summarizePairCheckDiff(currentPlan, pairPlan, filmMap)
   const delta = pairPlan.filmCount - currentPlan.filmCount
-  const pairMaxFilmCountProven = pairPlanProof(pairPlan)
+  const pairMaxFilmCountProven = !!pairPlan.metadata?.maxFilmCountProven
   const preferenceOptimalityProven = !!pairPlan.metadata?.preferenceOptimalityProven
 
   return {
@@ -97,16 +100,12 @@ export function shapePairCheckResult({
     drops,
     currentMaxFilmCountProven,
     pairMaxFilmCountProven,
-    // Back-compat alias for pair proof
     maxFilmCountProven: pairMaxFilmCountProven,
     preferenceOptimalityProven,
     pairFilmSetKey: filmSetKey(pairPlan.filmIds || [])
   }
 }
 
-/**
- * Runtime/worker failure — distinct from optimizer infeasibility.
- */
 export function shapePairCheckError({
   error,
   filmIdA,
@@ -129,17 +128,13 @@ export function shapePairCheckError({
     screeningB: null,
     adds: [],
     drops: [],
-    currentMaxFilmCountProven: currentPlanProof(currentPlan),
+    currentMaxFilmCountProven: !!currentPlan?.metadata?.maxFilmCountProven,
     pairMaxFilmCountProven: false,
     maxFilmCountProven: false,
     preferenceOptimalityProven: false
   }
 }
 
-/**
- * Honest count copy for a feasible pair-check result.
- * Never claims "maximum" unless pairMaxFilmCountProven (or maxFilmCountProven).
- */
 export function formatPairCheckCountCopy(pairCheck) {
   const pairCount = pairCheck.pairFilmCount
   const currentCount = pairCheck.currentFilmCount
@@ -162,7 +157,6 @@ export function formatPairCheckCountCopy(pairCheck) {
     return `Both can fit. With both required, the maximum is ${pairCount} films.`
   }
 
-  // Unproven pair count — "best found" language only
   if (delta === 0) {
     return `You can still see ${pairCount} films in the best schedule found.`
   }
@@ -172,9 +166,6 @@ export function formatPairCheckCountCopy(pairCheck) {
   return `The best schedule found with both has ${pairCount} films.`
 }
 
-/**
- * Compact proof footnotes for the pair-check card (feasible only).
- */
 export function formatPairCheckProofLines(pairCheck) {
   if (!pairCheck?.feasible) return []
   const pairProven = !!(

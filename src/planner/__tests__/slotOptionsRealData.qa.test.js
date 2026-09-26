@@ -125,12 +125,14 @@ describe('slot options real-data QA', () => {
           const pair = generatePlanV3({
             films,
             screenings,
-            interests,
+            interests: {
+              ...interests,
+              [s.filmId]: INTEREST_LEVELS.MUST_SEE,
+              [opt.filmId]: INTEREST_LEVELS.MUST_SEE
+            },
             constraints: {
               excludedFilms: [],
-              requiredFilms: [s.filmId, opt.filmId].filter(
-                id => interests[id] !== INTEREST_LEVELS.MUST_SEE
-              )
+              requiredFilms: []
             },
             attendanceConstraints: { attendanceDays, availabilityByDate },
             timeBudgetMs: 12000

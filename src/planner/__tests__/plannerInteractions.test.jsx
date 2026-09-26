@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { generateCurrentPlan, applyExcludeFilm } from '../generateCurrentPlan'
+import { generateCurrentPlan } from '../generateCurrentPlan'
 import { films, screenings } from '../../utils/festivalData'
 import { PlannerProvider, usePlanner } from '../../contexts/PlannerContext'
 import { UserStateProvider } from '../../contexts/UserStateContext'
@@ -67,7 +67,7 @@ describe('generateCurrentPlan shared path', () => {
     expect(validatePlan(plan, films, screenings).valid).toBe(true)
   }, 60000)
 
-  it('Exclude removes film and clears manual require', () => {
+  it('Skip removes film from regenerated plan', () => {
     const base = generateCurrentPlan({
       films,
       screenings,
@@ -78,33 +78,27 @@ describe('generateCurrentPlan shared path', () => {
       timeBudgetMs: 15000
     })
     const filmId = base.screenings[0].filmId
-    const updates = applyExcludeFilm(
-      { ...EMPTY_CONSTRAINTS, requiredFilms: [filmId] },
-      filmId
-    )
-    expect(updates.requiredFilms).not.toContain(filmId)
 
     const regenerated = generateCurrentPlan({
       films,
       screenings,
-      interests: {},
+      interests: { [filmId]: INTEREST_LEVELS.SKIP },
       constraints: EMPTY_CONSTRAINTS,
       arrival: DEFAULT_ARRIVAL,
       departure: DEFAULT_DEPARTURE,
-      constraintOverrides: updates,
       timeBudgetMs: 15000
     })
 
     expect(regenerated.screenings.some(s => s.filmId === filmId)).toBe(false)
   }, 60000)
 
-  it('manual Require forces Want film into the plan', () => {
+  it('Must forces film into the plan', () => {
     const wantId = films[0].id
     const plan = generateCurrentPlan({
       films,
       screenings,
-      interests: { [wantId]: INTEREST_LEVELS.WANT_TO_SEE },
-      constraints: { ...EMPTY_CONSTRAINTS, requiredFilms: [wantId] },
+      interests: { [wantId]: INTEREST_LEVELS.MUST_SEE },
+      constraints: EMPTY_CONSTRAINTS,
       arrival: DEFAULT_ARRIVAL,
       departure: DEFAULT_DEPARTURE,
       timeBudgetMs: 20000
@@ -117,7 +111,7 @@ describe('generateCurrentPlan shared path', () => {
   }, 60000)
 })
 
-describe('resetPlannerSession v6', () => {
+describe('resetPlannerSession v7', () => {
   beforeEach(() => localStorage.clear())
 
   it('session reset clears required/excluded without obsolete locks', () => {
@@ -132,7 +126,7 @@ describe('resetPlannerSession v6', () => {
     })
 
     const saved = JSON.parse(localStorage.getItem('oiff-planner-state'))
-    expect(saved.version).toBe('6')
+    expect(saved.version).toBe('7')
     expect(saved.constraints.requiredFilms).toEqual([])
     expect(saved.constraints.excludedFilms).toEqual([])
     expect(saved.constraints.lockedScreenings).toBeUndefined()

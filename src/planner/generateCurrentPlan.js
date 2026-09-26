@@ -52,19 +52,22 @@ export function appendUniqueId(list = [], id) {
 }
 
 /**
- * Remove a film from the manual requiredFilms list.
+ * @deprecated Manual exclude list removed — use Skip rating instead.
+ * Kept as a no-op clearer for migration/tests.
  */
-export function removeRequiredFilm(requiredFilms = [], filmId) {
-  return requiredFilms.filter(id => id !== filmId)
+export function removeRequiredFilm(requiredFilms = [], _filmId) {
+  void _filmId
+  return requiredFilms.filter(() => false)
 }
 
 /**
- * When excluding a film, also clear any manual require override.
+ * @deprecated Manual exclude list removed — use Skip rating instead.
+ * Clears legacy lists only.
  */
-export function applyExcludeFilm(constraints, filmId) {
-  const excludedFilms = appendUniqueId(constraints.excludedFilms, filmId)
-  const requiredFilms = removeRequiredFilm(constraints.requiredFilms, filmId)
-  return { excludedFilms, requiredFilms }
+export function applyExcludeFilm(_constraints, _filmId) {
+  void _constraints
+  void _filmId
+  return { excludedFilms: [], requiredFilms: [] }
 }
 
 export { resolveRequiredFilms, DEFAULT_TIME_BUDGET_MS }

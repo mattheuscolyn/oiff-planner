@@ -109,7 +109,6 @@ describe('RequiredConflictView', () => {
           'film-a': INTEREST_LEVELS.MUST_SEE,
           'film-b': INTEREST_LEVELS.MUST_SEE
         }}
-        manualRequired={[]}
         onPrioritizeFilm={onPrioritize}
         onRelaxFilm={vi.fn()}
         onBackToRatings={vi.fn()}
@@ -117,7 +116,7 @@ describe('RequiredConflictView', () => {
       />
     )
 
-    expect(screen.getByText('Two required films can’t both fit')).toBeTruthy()
+    expect(screen.getByText('Two Must films can’t both fit')).toBeTruthy()
     expect(screen.getByText('Once Upon a Time in Harlem')).toBeTruthy()
     expect(screen.getByText('Iron Boy')).toBeTruthy()
     expect(screen.getByText(/Orcas Center Main/)).toBeTruthy()
@@ -156,7 +155,6 @@ describe('RequiredConflictView', () => {
           'film-b': INTEREST_LEVELS.MUST_SEE,
           'film-c': INTEREST_LEVELS.MUST_SEE
         }}
-        manualRequired={[]}
         onPrioritizeFilm={vi.fn()}
         onRelaxFilm={onRelax}
         onBackToRatings={vi.fn()}
@@ -164,8 +162,8 @@ describe('RequiredConflictView', () => {
       />
     )
 
-    expect(screen.getByText(/3 required films can’t all fit/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Relax requirement for Iron Boy/i }))
+    expect(screen.getByText(/3 Must films can’t all fit/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Move Iron Boy to Want/i }))
     expect(onRelax).toHaveBeenCalledWith('film-b')
   })
 })
