@@ -20,7 +20,7 @@ import {
   buildOmissions,
   summarizeAlternative
 } from './planResult'
-import { diagnoseRequiredConflict } from './requiredConflict'
+import { diagnoseRequiredConflict, findRequiredScreeningAssignment } from './requiredConflict'
 import {
   buildSlotOptions,
   enrichOmissionsWithSlotHints
@@ -99,18 +99,42 @@ export function generatePlanV3(config) {
   console.log(`[OptimizerV3] Daily maxima:`, dailyMaxima)
   console.log(`[OptimizerV3] Global count upper bound: ${globalCountUpperBound}`)
 
+  // Seed Phase A with a known required-covering assignment so a short time budget
+  // cannot report "no schedule" after diagnosis already proved coverage is possible.
+  const requiredSeedScreenings = findRequiredScreeningAssignment(
+    data.requiredFilmIds,
+    data,
+    screeningsOverlapMinutes
+  )
+  const requiredSeedSolution = requiredSeedScreenings?.length
+    ? solutionFromFilms(
+        requiredSeedScreenings,
+        new Set(requiredSeedScreenings.map(s => s.filmId)),
+        interests
+      )
+    : null
+
   const usedMs = performance.now() - startTime
   const remaining = Math.max(100, timeBudgetMs - usedMs)
-  const budgetA = remaining * 0.25
+  // Give Phase A more budget when several films are required — coverage first, then count.
+  const phaseAShare = data.requiredFilmIds.length >= 3 ? 0.4 : 0.25
+  const budgetA = remaining * phaseAShare
 
-  const phaseA = runCountPhase(dailySchedules, data, interests, budgetA, onProgress)
+  const phaseA = runCountPhase(dailySchedules, data, interests, budgetA, onProgress, {
+    seedSolution: requiredSeedSolution
+  })
   if (!phaseA.bestSolution) {
+    const titles = data.requiredFilmIds
+      .map(id => data.filmMap.get(id)?.title || id)
+      .join(', ')
     return infeasibleResult(
       data.requiredFilmIds.length > 0
-        ? 'No schedule can include all required films.'
+        ? `No schedule can include all required films (${titles}).`
         : 'No valid schedule found',
       startTime,
       {
+        reasonCode:
+          data.requiredFilmIds.length > 0 ? 'required-film-search-miss' : 'infeasible',
         requiredFilmIds: data.requiredFilmIds,
         combinationsExplored: phaseA.combinationsExplored,
         dailyMaxima,
@@ -489,10 +513,11 @@ function solutionFromFilms(globalScreenings, globalFilms, interests) {
  * Phase A — maximize film count. Hitting the daily-capacity upper bound
  * proves the count immediately without exhaustive enumeration.
  */
-function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress) {
+function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress, options = {}) {
   const startTime = performance.now()
   const deadline = startTime + timeBudgetMs
   const upperBound = data.globalCountUpperBound || 0
+  const seedSolution = options.seedSolution || null
 
   const days = Array.from(dailySchedules.keys()).sort(
     (a, b) => (dailySchedules.get(a)?.length || 0) - (dailySchedules.get(b)?.length || 0)
@@ -501,6 +526,16 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
   const suffixMax = new Array(days.length + 1).fill(0)
   for (let i = days.length - 1; i >= 0; i--) {
     suffixMax[i] = suffixMax[i + 1] + (data.maxPerDay.get(days[i]) || 0)
+  }
+
+  // requiredFilmId -> dates with an attendance-feasible screening
+  const requiredDates = new Map()
+  for (const id of data.requiredFilmIds) {
+    const dates = new Set()
+    for (const s of data.filmToFeasibleScreenings.get(id) || []) {
+      dates.add(s.date)
+    }
+    requiredDates.set(id, dates)
   }
 
   // Prefer high film-count day schedules for Phase A
@@ -513,11 +548,34 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
     return list
   })
 
-  let bestCount = -1
-  let bestSolution = null
+  let bestCount = seedSolution ? seedSolution.filmCount : -1
+  let bestSolution = seedSolution
   let combinationsExplored = 0
   let timedOut = false
   let hitUpperBound = false
+
+  if (seedSolution && upperBound > 0 && bestCount >= upperBound) {
+    hitUpperBound = true
+  }
+
+  function dayIsLastChanceForUncoveredRequired(dayIndex, globalFilms) {
+    const date = days[dayIndex]
+    const laterDates = new Set(days.slice(dayIndex + 1))
+    for (const id of data.requiredFilmIds) {
+      if (globalFilms.has(id)) continue
+      const dates = requiredDates.get(id)
+      if (!dates || !dates.has(date)) continue
+      let laterHas = false
+      for (const d of dates) {
+        if (laterDates.has(d)) {
+          laterHas = true
+          break
+        }
+      }
+      if (!laterHas) return true
+    }
+    return false
+  }
 
   function combine(dayIndex, globalScreenings, globalFilms, requiredCovered) {
     combinationsExplored++
@@ -561,6 +619,7 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
     if (optimistic <= bestCount) return
 
     const daySchedules = orderedByDay[dayIndex]
+    const mustUseDay = dayIsLastChanceForUncoveredRequired(dayIndex, globalFilms)
 
     for (const daySchedule of daySchedules) {
       if (dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, data.filmMap)) {
@@ -590,8 +649,11 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
       if (timedOut || hitUpperBound) return
     }
 
-    // Skip day (only useful if required coverage / count still possible)
-    if (globalFilms.size + suffixMax[dayIndex + 1] > bestCount) {
+    // Skip day only when it is not the last chance to cover a required film
+    if (
+      !mustUseDay &&
+      globalFilms.size + suffixMax[dayIndex + 1] > bestCount
+    ) {
       combine(dayIndex + 1, globalScreenings, globalFilms, requiredCovered)
     }
   }
