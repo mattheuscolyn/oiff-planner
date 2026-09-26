@@ -12,7 +12,6 @@ import {
   shapePairCheckResult
 } from '../planner/pairCheck'
 import { INTEREST_LEVELS } from '../utils/userState'
-import { setSelectedScreenings } from '../utils/userState'
 import AttendanceStep from './AttendanceStep'
 import ErrorBoundary from './ErrorBoundary'
 import RequiredConflictView from './RequiredConflictView'
@@ -20,8 +19,8 @@ import FilmPoster from './FilmPoster'
 import SlotOptionsPanel from './SlotOptionsPanel'
 import './PlannerView.css'
 
-function PlannerViewInner() {
-  const { interests, updateFilmInterest } = useUserState()
+function PlannerViewInner({ onPlanApplied }) {
+  const { interests, updateFilmInterest, setSelectedScreenings } = useUserState()
   const {
     constraints,
     arrival,
@@ -178,7 +177,11 @@ function PlannerViewInner() {
     if (!generatedPlan?.screenings) return
     const screeningIds = generatedPlan.screenings.map(s => s.id)
     setSelectedScreenings(screeningIds)
-    alert(`Plan applied! ${screeningIds.length} screenings added to My Plan.`)
+    if (onPlanApplied) {
+      onPlanApplied(screeningIds.length)
+    } else {
+      alert(`Plan applied! ${screeningIds.length} screenings added to My Plan.`)
+    }
   }
 
   const handleSkipFilm = (filmId) => {
@@ -597,14 +600,14 @@ function formatInterest(interest) {
   return labels[interest] || interest
 }
 
-function PlannerView() {
+function PlannerView({ onPlanApplied }) {
   const { resetPlannerSession } = usePlanner()
   return (
     <ErrorBoundary
       onReset={() => {}}
       onResetPlanner={() => resetPlannerSession()}
     >
-      <PlannerViewInner />
+      <PlannerViewInner onPlanApplied={onPlanApplied} />
     </ErrorBoundary>
   )
 }
