@@ -35,8 +35,7 @@ export function deriveFestivalAvailability(arrival, departure, ferries = []) {
   
   festivalDates.forEach(festivalDate => {
     // Include festival date if it falls within the travel interval
-    // BUT: arrival/departure dates themselves may be travel-only days
-    // Only include actual festival dates (Oct 14-18)
+    // Festival days are Wed–Sun plus Monday encore programming (Oct 14–19)
     if (festivalDate >= arrivalDate && festivalDate <= departureDate) {
       attendanceDays[festivalDate] = true
       
@@ -169,7 +168,7 @@ export function formatAvailabilitySummary(arrival, departure, ferries = []) {
   const hasRestrictions = Object.keys(availabilityByDate).length > 0
   
   if (isFullFestival && !hasRestrictions) {
-    return 'Available for the full festival · Oct 14–18'
+    return 'Available for the full festival · Oct 14–19'
   }
   
   // Format partial availability

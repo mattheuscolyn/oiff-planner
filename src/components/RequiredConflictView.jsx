@@ -174,19 +174,26 @@ function RequiredConflictView({
                 {published.length === 0 ? (
                   <p className="conflict-empty">No published screenings found.</p>
                 ) : (
-                  published.map(s => (
-                    <div key={s.id} className="conflict-screening outside">
-                      <div className="conflict-screening-when">
-                        <strong>{formatDate(s.date)}</strong>
-                        <span>
-                          {formatTime(s.startTime)} –{' '}
-                          {formatTime(s.endTime || getScreeningEndTime(s))}
-                        </span>
-                        <span className="conflict-screening-venue">{s.venue}</span>
+                  published.map(s => {
+                    const isSchool = /school screening/i.test(s.name || '')
+                    return (
+                      <div key={s.id} className="conflict-screening outside">
+                        <div className="conflict-screening-when">
+                          <strong>{formatDate(s.date)}</strong>
+                          <span>
+                            {formatTime(s.startTime)} –{' '}
+                            {formatTime(s.endTime || getScreeningEndTime(s))}
+                          </span>
+                          <span className="conflict-screening-venue">{s.venue}</span>
+                        </div>
+                        <div className="conflict-overlap-note">
+                          {isSchool
+                            ? 'School screening (not available for festival planning)'
+                            : 'Outside your attendance window'}
+                        </div>
                       </div>
-                      <div className="conflict-overlap-note">Outside your attendance window</div>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
               <div className="conflict-choose">

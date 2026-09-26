@@ -469,7 +469,7 @@ describe('Fixed-count preference and max−1 alternatives', () => {
 })
 
 describe('Real OIFF unrestricted maximum', () => {
-  it('produces 24 films with count proven (full attendance)', { timeout: 90000 }, () => {
+  it('produces 26 films with count proven (full attendance including Monday encore)', { timeout: 90000 }, () => {
     const arrival = { date: '2026-10-13', type: 'already-on-island' }
     const departure = { date: '2026-10-19', type: 'staying-longer' }
     const { attendanceDays, availabilityByDate } = deriveFestivalAvailability(
@@ -488,16 +488,16 @@ describe('Real OIFF unrestricted maximum', () => {
     })
 
     expect(result.infeasible).toBe(false)
-    expect(result.filmCount).toBe(24)
+    expect(result.filmCount).toBe(26)
     expect(result.metadata.maxFilmCountProven).toBe(true)
-    expect(result.metadata.globalCountUpperBound).toBe(24)
+    expect(result.metadata.globalCountUpperBound).toBe(26)
     expect(validatePlan(result, films, screenings).valid).toBe(true)
 
     expect(result.alternatives.oneFewer).toBeTruthy()
-    expect(result.alternatives.oneFewer.filmCount).toBe(23)
+    expect(result.alternatives.oneFewer.filmCount).toBe(25)
     expect(
       validatePlan(
-        { screenings: result.alternatives.oneFewer.screenings, filmCount: 23 },
+        { screenings: result.alternatives.oneFewer.screenings, filmCount: 25 },
         films,
         screenings
       ).valid

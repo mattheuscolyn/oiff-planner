@@ -97,7 +97,8 @@ describe('verify:planner', () => {
         '2026-10-15': 'Thu',
         '2026-10-16': 'Fri',
         '2026-10-17': 'Sat',
-        '2026-10-18': 'Sun'
+        '2026-10-18': 'Sun',
+        '2026-10-19': 'Mon'
       }
       console.log('Daily maxima:')
       for (const [date, label] of Object.entries(dayLabels)) {
@@ -109,21 +110,21 @@ describe('verify:planner', () => {
       console.log(
         `Preference optimality proven: ${unrestricted.metadata?.preferenceOptimalityProven}`
       )
-      console.log(`Best 23-film alternative: ${unrestricted.alternatives?.oneFewer?.filmCount ?? 'none'}`)
+      console.log(`Best 25-film alternative: ${unrestricted.alternatives?.oneFewer?.filmCount ?? 'none'}`)
       console.log(`phaseMs:`, unrestricted.metadata?.phaseMs)
       console.log(`elapsedMs: ${unrestricted.metadata?.elapsedMs?.toFixed(1)}`)
 
-      expect(unrestricted.filmCount).toBe(24)
+      expect(unrestricted.filmCount).toBe(26)
       expect(unrestricted.metadata.maxFilmCountProven).toBe(true)
-      expect(unrestricted.metadata.globalCountUpperBound).toBe(24)
+      expect(unrestricted.metadata.globalCountUpperBound).toBe(26)
       expect(unrestricted.alternatives.oneFewer).toBeTruthy()
-      expect(unrestricted.alternatives.oneFewer.filmCount).toBe(23)
+      expect(unrestricted.alternatives.oneFewer.filmCount).toBe(25)
       expect(validatePlan(unrestricted, films, screenings).valid).toBe(true)
       expect(
         validatePlan(
           {
             screenings: unrestricted.alternatives.oneFewer.screenings,
-            filmCount: 23
+            filmCount: 25
           },
           films,
           screenings

@@ -151,7 +151,7 @@ describe('resetPlannerSession v6', () => {
 })
 
 describe('Benchmark regressions', () => {
-  it('24-film unrestricted via generateCurrentPlan', { timeout: 90000 }, () => {
+  it('26-film unrestricted via generateCurrentPlan', { timeout: 90000 }, () => {
     const result = generateCurrentPlan({
       films,
       screenings,
@@ -161,6 +161,6 @@ describe('Benchmark regressions', () => {
       departure: DEFAULT_DEPARTURE,
       timeBudgetMs: 60000
     })
-    expect(result.filmCount).toBe(24)
+    expect(result.filmCount).toBe(26)
   })
 })
