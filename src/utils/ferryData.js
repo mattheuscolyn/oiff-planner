@@ -172,9 +172,21 @@ export function getFerries() {
 /**
  * Get ferry by ID
  */
-export function getFerryById(id, ferryList) {
+export function getFerryById(id, ferryList, options = {}) {
+  if (!id) return null
   const list = ferryList || getFerries()
-  return list.find(f => f.id === id)
+  const { date = null, route = null } = options
+  if (date || route) {
+    const scoped = list.find(
+      f =>
+        f.id === id &&
+        (date == null || f.date === date) &&
+        (route == null || f.route === route)
+    )
+    if (scoped) return scoped
+  }
+  // Fall back to first id match (legacy callers / same timetable across dates)
+  return list.find(f => f.id === id) || null
 }
 
 /**

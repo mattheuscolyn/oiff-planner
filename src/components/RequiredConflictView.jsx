@@ -175,9 +175,20 @@ function RequiredConflictView({
                   <p className="conflict-empty">No published screenings found.</p>
                 ) : (
                   published.map(s => {
-                    const isSchool = /school screening/i.test(s.name || '')
+                    const assessment =
+                      plan.unavailable.screenings?.find(row => row.screeningId === s.id) ||
+                      null
+                    const label =
+                      assessment?.label ||
+                      (/school screening/i.test(s.name || '')
+                        ? 'School screening (not available for festival planning)'
+                        : 'Outside your attendance window')
+                    const isOk = assessment?.eligible === true
                     return (
-                      <div key={s.id} className="conflict-screening outside">
+                      <div
+                        key={s.id}
+                        className={`conflict-screening ${isOk ? 'inside' : 'outside'}`}
+                      >
                         <div className="conflict-screening-when">
                           <strong>{formatDate(s.date)}</strong>
                           <span>
@@ -186,11 +197,7 @@ function RequiredConflictView({
                           </span>
                           <span className="conflict-screening-venue">{s.venue}</span>
                         </div>
-                        <div className="conflict-overlap-note">
-                          {isSchool
-                            ? 'School screening (not available for festival planning)'
-                            : 'Outside your attendance window'}
-                        </div>
+                        <div className="conflict-overlap-note">{label}</div>
                       </div>
                     )
                   })

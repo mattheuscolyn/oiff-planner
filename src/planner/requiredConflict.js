@@ -3,6 +3,8 @@
  * Uses the same overlap/attendance primitives as optimizerV3.
  */
 
+import { classifyScreeningVsAttendance } from '../utils/festivalAvailability'
+
 /**
  * @param {object} data - precomputeData result (filmMap, filmToFeasibleScreenings, requiredFilmIds, …)
  * @param {(s1,s2,f1,f2)=>boolean} screeningsOverlapMinutes
@@ -107,15 +109,36 @@ export function diagnoseRequiredConflict(data, screeningsOverlapMinutes) {
   for (const filmId of ids) {
     const feasible = data.filmToFeasibleScreenings.get(filmId) || []
     if (feasible.length === 0) {
+      const film = data.filmMap.get(filmId)
       const allScreenings = data.filmToScreenings?.get(filmId) || []
+      const screeningAssessments = allScreenings.map(s => {
+        const assessment = classifyScreeningVsAttendance(
+          s,
+          film,
+          data.attendanceDays,
+          data.availabilityByDate
+        )
+        return {
+          screeningId: s.id,
+          date: s.date,
+          startTime: s.startTime,
+          endTime: s.endTime || null,
+          venue: s.venue,
+          name: s.name || null,
+          ...assessment
+        }
+      })
       return {
         ok: false,
         reasonCode: 'required-film-unavailable',
-        reason: `Required film "${data.filmMap.get(filmId)?.title || filmId}" has no screening within your attendance window.`,
+        reason: `Required film "${film?.title || filmId}" has no screening within your attendance window.`,
         conflict: null,
         unavailable: {
           filmId,
-          publishedScreeningIds: allScreenings.map(s => s.id)
+          publishedScreeningIds: allScreenings.map(s => s.id),
+          screenings: screeningAssessments,
+          attendanceDays: data.attendanceDays || {},
+          availabilityByDate: data.availabilityByDate || {}
         }
       }
     }
