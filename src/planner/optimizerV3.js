@@ -106,22 +106,29 @@ export function generatePlanV3(config) {
     data,
     screeningsOverlapMinutes
   )
-  const requiredSeedSolution = requiredSeedScreenings?.length
-    ? solutionFromFilms(
-        requiredSeedScreenings,
-        new Set(requiredSeedScreenings.map(s => s.filmId)),
-        interests
-      )
-    : null
+  const requiredOnlyCount = requiredSeedScreenings?.length
+    ? new Set(requiredSeedScreenings.map(s => s.filmId)).size
+    : 0
+  // Extend the feasible Must assignment with compatible day packs so Phase A
+  // starts from a high-count incumbent instead of the bare required set.
+  const countIncumbent = buildStrongCountIncumbent(
+    requiredSeedScreenings,
+    dailySchedules,
+    data,
+    interests
+  )
 
-  const usedMs = performance.now() - startTime
-  const remaining = Math.max(100, timeBudgetMs - usedMs)
-  // Give Phase A more budget when several films are required — coverage first, then count.
-  const phaseAShare = data.requiredFilmIds.length >= 3 ? 0.4 : 0.25
-  const budgetA = remaining * phaseAShare
+  console.log(
+    `[OptimizerV3] Count incumbent: ${countIncumbent?.filmCount ?? 0} (required-only seed ${requiredOnlyCount})`
+  )
+
+  // Phase A gets a share of the original budget, not of whatever is left after
+  // daily enumeration. Preprocess must not shrink the count search to a few seconds.
+  const phaseAShare = data.requiredFilmIds.length >= 3 ? 0.5 : 0.4
+  const budgetA = timeBudgetMs * phaseAShare
 
   const phaseA = runCountPhase(dailySchedules, data, interests, budgetA, onProgress, {
-    seedSolution: requiredSeedSolution
+    seedSolution: countIncumbent
   })
   if (!phaseA.bestSolution) {
     const titles = data.requiredFilmIds
@@ -421,6 +428,15 @@ function countRequiredIn(filmSet, requiredFilmSet) {
   return n
 }
 
+function countScarceRequired(schedule, requiredDates) {
+  let n = 0
+  for (const id of schedule.films) {
+    const dates = requiredDates.get(id)
+    if (dates && dates.size <= 1) n++
+  }
+  return n
+}
+
 function pruneDominatedSchedules(schedules) {
   // Dedupe by film set only. Do NOT drop smaller non-dominated-looking
   // schedules: Phase C needs day packs of size max-1, and preference
@@ -510,6 +526,203 @@ function solutionFromFilms(globalScreenings, globalFilms, interests) {
 }
 
 /**
+ * Largest feasible day pack that contains every id in mustInclude and none of usedFilms.
+ * @returns {object|null}
+ */
+function bestDisjointDaySchedule(schedules, mustInclude, usedFilms) {
+  let best = null
+  for (const sched of schedules) {
+    let ok = true
+    for (const id of mustInclude) {
+      if (!sched.films.has(id)) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    for (const id of sched.films) {
+      if (usedFilms.has(id)) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    if (!best || sched.filmCount > best.filmCount) best = sched
+  }
+  return best
+}
+
+function scheduleFromScreenings(screenings) {
+  const films = new Set(screenings.map(s => s.filmId))
+  return {
+    screenings: screenings.slice(),
+    films,
+    filmCount: films.size
+  }
+}
+
+function usedFilmsExceptDay(dayChoice, date) {
+  const used = new Set()
+  for (const [d, sched] of dayChoice) {
+    if (d === date || !sched) continue
+    for (const id of sched.films) used.add(id)
+  }
+  return used
+}
+
+function totalChosenFilms(dayChoice) {
+  let n = 0
+  for (const sched of dayChoice.values()) n += sched?.filmCount || 0
+  return n
+}
+
+/**
+ * Build a high-count feasible plan that still contains every Must film.
+ * Starts from a known required assignment, replaces each seeded day with the
+ * largest compatible pack that keeps those Must films, fills the other days,
+ * then relocates a Must film when that frees a larger pack.
+ *
+ * @returns {object|null} solutionFromFilms result
+ */
+export function buildStrongCountIncumbent(requiredScreenings, dailySchedules, data, interests) {
+  const requiredIds = data.requiredFilmIds || []
+  const seed = requiredScreenings || []
+  if (!requiredIds.length && seed.length === 0 && dailySchedules.size === 0) return null
+
+  const seedByDay = new Map()
+  for (const screening of seed) {
+    if (!seedByDay.has(screening.date)) seedByDay.set(screening.date, [])
+    seedByDay.get(screening.date).push(screening)
+  }
+
+  const dayChoice = new Map()
+  const dates = Array.from(dailySchedules.keys()).sort((a, b) => {
+    const aSeeded = seedByDay.has(a) ? 0 : 1
+    const bSeeded = seedByDay.has(b) ? 0 : 1
+    if (aSeeded !== bSeeded) return aSeeded - bSeeded
+    return (data.maxPerDay.get(b) || 0) - (data.maxPerDay.get(a) || 0)
+  })
+
+  for (const date of dates) {
+    const seeded = seedByDay.get(date) || []
+    const mustInclude = seeded
+      .map(s => s.filmId)
+      .filter(id => data.requiredFilmSet.has(id))
+    const used = usedFilmsExceptDay(dayChoice, date)
+    let best = bestDisjointDaySchedule(dailySchedules.get(date) || [], mustInclude, used)
+    if (!best && seeded.length) best = scheduleFromScreenings(seeded)
+    if (best) dayChoice.set(date, best)
+  }
+
+  // Move a Must film onto an alternate day when the swap increases total count.
+  for (const id of requiredIds) {
+    let fromDate = null
+    for (const [d, sched] of dayChoice) {
+      if (sched?.films.has(id)) {
+        fromDate = d
+        break
+      }
+    }
+    if (!fromDate) continue
+
+    const fromSched = dayChoice.get(fromDate)
+    const otherRequiredOnFrom = []
+    for (const fid of fromSched.films) {
+      if (fid !== id && data.requiredFilmSet.has(fid)) otherRequiredOnFrom.push(fid)
+    }
+
+    const altDates = new Set(
+      (data.filmToFeasibleScreenings.get(id) || []).map(s => s.date)
+    )
+    altDates.delete(fromDate)
+    const baseCount = totalChosenFilms(dayChoice)
+
+    for (const toDate of altDates) {
+      const toSched = dayChoice.get(toDate)
+      const otherRequiredOnTo = []
+      if (toSched) {
+        for (const fid of toSched.films) {
+          if (data.requiredFilmSet.has(fid)) otherRequiredOnTo.push(fid)
+        }
+      }
+
+      const usedFrom = usedFilmsExceptDay(dayChoice, fromDate)
+      // The Must film is leaving this day; do not keep a pack that still includes it.
+      usedFrom.add(id)
+      const newFrom = bestDisjointDaySchedule(
+        dailySchedules.get(fromDate) || [],
+        otherRequiredOnFrom,
+        usedFrom
+      )
+      // Dropping the only screening on this day is allowed when no other Must remains.
+      if (!newFrom && otherRequiredOnFrom.length > 0) continue
+
+      const usedTo = usedFilmsExceptDay(dayChoice, toDate)
+      if (fromSched) {
+        for (const fid of fromSched.films) usedTo.delete(fid)
+      }
+      if (newFrom) {
+        for (const fid of newFrom.films) usedTo.add(fid)
+      }
+      usedTo.delete(id)
+
+      const newTo = bestDisjointDaySchedule(
+        dailySchedules.get(toDate) || [],
+        [...otherRequiredOnTo, id],
+        usedTo
+      )
+      if (!newTo) continue
+
+      const newTotal =
+        baseCount -
+        (fromSched?.filmCount || 0) -
+        (toSched?.filmCount || 0) +
+        (newFrom?.filmCount || 0) +
+        newTo.filmCount
+      if (newTotal > baseCount) {
+        if (newFrom) dayChoice.set(fromDate, newFrom)
+        else dayChoice.delete(fromDate)
+        dayChoice.set(toDate, newTo)
+        break
+      }
+    }
+  }
+
+  // Upgrade any day whose Must films are still covered, now that placement is settled.
+  for (const date of dailySchedules.keys()) {
+    const current = dayChoice.get(date)
+    const mustInclude = []
+    if (current) {
+      for (const fid of current.films) {
+        if (!data.requiredFilmSet.has(fid)) continue
+        let elsewhere = false
+        for (const [d, sched] of dayChoice) {
+          if (d !== date && sched?.films.has(fid)) elsewhere = true
+        }
+        if (!elsewhere) mustInclude.push(fid)
+      }
+    }
+    const used = usedFilmsExceptDay(dayChoice, date)
+    const best = bestDisjointDaySchedule(dailySchedules.get(date) || [], mustInclude, used)
+    if (best && (!current || best.filmCount > current.filmCount)) {
+      dayChoice.set(date, best)
+    }
+  }
+
+  const screenings = []
+  const films = new Set()
+  for (const sched of dayChoice.values()) {
+    if (!sched) continue
+    for (const s of sched.screenings) screenings.push(s)
+    for (const id of sched.films) films.add(id)
+  }
+
+  if (requiredIds.some(id => !films.has(id))) return null
+  if (!screenings.length) return null
+  return solutionFromFilms(screenings, films, interests)
+}
+
+/**
  * Phase A — maximize film count. Hitting the daily-capacity upper bound
  * proves the count immediately without exhaustive enumeration.
  */
@@ -538,12 +751,16 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
     requiredDates.set(id, dates)
   }
 
-  // Prefer high film-count day schedules for Phase A
+  // High film-count packs first so a large feasible plan is found before
+  // required-heavy but small packs. Scarce Must films break ties.
   const orderedByDay = days.map(date => {
     const list = (dailySchedules.get(date) || []).slice()
     list.sort((a, b) => {
-      if (b.requiredCount !== a.requiredCount) return b.requiredCount - a.requiredCount
-      return b.filmCount - a.filmCount
+      if (b.filmCount !== a.filmCount) return b.filmCount - a.filmCount
+      const scarceB = countScarceRequired(b, requiredDates)
+      const scarceA = countScarceRequired(a, requiredDates)
+      if (scarceB !== scarceA) return scarceB - scarceA
+      return b.requiredCount - a.requiredCount
     })
     return list
   })
@@ -558,9 +775,10 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
     hitUpperBound = true
   }
 
-  function dayIsLastChanceForUncoveredRequired(dayIndex, globalFilms) {
+  function lastChanceRequiredIds(dayIndex, globalFilms) {
     const date = days[dayIndex]
     const laterDates = new Set(days.slice(dayIndex + 1))
+    const ids = []
     for (const id of data.requiredFilmIds) {
       if (globalFilms.has(id)) continue
       const dates = requiredDates.get(id)
@@ -572,9 +790,9 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
           break
         }
       }
-      if (!laterHas) return true
+      if (!laterHas) ids.push(id)
     }
-    return false
+    return ids
   }
 
   function combine(dayIndex, globalScreenings, globalFilms, requiredCovered) {
@@ -619,9 +837,11 @@ function runCountPhase(dailySchedules, data, interests, timeBudgetMs, onProgress
     if (optimistic <= bestCount) return
 
     const daySchedules = orderedByDay[dayIndex]
-    const mustUseDay = dayIsLastChanceForUncoveredRequired(dayIndex, globalFilms)
+    const neededNow = lastChanceRequiredIds(dayIndex, globalFilms)
+    const mustUseDay = neededNow.length > 0
 
     for (const daySchedule of daySchedules) {
+      if (neededNow.some(id => !daySchedule.films.has(id))) continue
       if (dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, data.filmMap)) {
         continue
       }
