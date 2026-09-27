@@ -8,13 +8,14 @@ import { classifyScreeningVsAttendance } from '../utils/festivalAvailability'
 /**
  * @param {object} data - precomputeData result (filmMap, filmToFeasibleScreenings, requiredFilmIds, …)
  * @param {(s1,s2,f1,f2)=>boolean} screeningsOverlapMinutes
+ * @returns {object[]|null} chosen screenings covering every film id, or null
  */
-export function canScheduleRequiredFilms(filmIds, data, screeningsOverlapMinutes) {
+export function findRequiredScreeningAssignment(filmIds, data, screeningsOverlapMinutes) {
   const options = filmIds.map(id => data.filmToFeasibleScreenings.get(id) || [])
-  if (options.some(o => o.length === 0)) return false
+  if (options.some(o => o.length === 0)) return null
 
   function search(index, chosen) {
-    if (index >= options.length) return true
+    if (index >= options.length) return chosen.slice()
     for (const screening of options[index]) {
       const film = data.filmMap.get(screening.filmId)
       let ok = true
@@ -27,13 +28,18 @@ export function canScheduleRequiredFilms(filmIds, data, screeningsOverlapMinutes
       }
       if (!ok) continue
       chosen.push(screening)
-      if (search(index + 1, chosen)) return true
+      const result = search(index + 1, chosen)
+      if (result) return result
       chosen.pop()
     }
-    return false
+    return null
   }
 
   return search(0, [])
+}
+
+export function canScheduleRequiredFilms(filmIds, data, screeningsOverlapMinutes) {
+  return findRequiredScreeningAssignment(filmIds, data, screeningsOverlapMinutes) != null
 }
 
 /**
