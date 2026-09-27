@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { generatePlanV3 } from '../optimizerV3'
+import { generatePlanV3, validateCountIncumbent } from '../optimizerV3'
 import { generateCurrentPlan } from '../generateCurrentPlan'
 import { films, screenings } from '../../utils/festivalData'
 import { INTEREST_LEVELS } from '../../utils/userState'
@@ -65,6 +65,9 @@ describe('Must set count search (user ferry regression)', () => {
     // Capacity bound on this ferry window is 24, and the incumbent hits it.
     expect(result.filmCount).toBe(24)
     expect(result.metadata.maxFilmCountProven).toBe(true)
+    expect(result.metadata.preferenceOptimalityProven).toBe(false)
+    expect(result.metadata.elapsedMs).toBeLessThan(4000)
+    expect(result.alternatives.sameSize.length).toBeGreaterThan(0)
     expect(validatePlan(result, films, screenings).valid).toBe(true)
   }, 60000)
 })
@@ -140,3 +143,115 @@ describe('Phase A improves a required-only seed', () => {
     expect(result.filmCount).toBe(18)
   })
 })
+
+describe('Must relocation across days', () => {
+  it('moves a Must onto its alternate day when that packs more films', () => {
+    const testFilms = [
+      { id: 'r', title: 'Must', runtime: 60 },
+      { id: 'a1', title: 'A1', runtime: 60 },
+      { id: 'a2', title: 'A2', runtime: 60 },
+      { id: 'a3', title: 'A3', runtime: 60 },
+      { id: 'b1', title: 'B1', runtime: 60 },
+      { id: 'b2', title: 'B2', runtime: 60 }
+    ]
+    const testScreenings = [
+      { id: 'r-d1', filmId: 'r', date: '2026-10-14', startTime: '10:00', endTime: '11:00', venue: 'Main' },
+      { id: 'a1', filmId: 'a1', date: '2026-10-14', startTime: '10:00', endTime: '11:00', venue: 'Box' },
+      { id: 'a2', filmId: 'a2', date: '2026-10-14', startTime: '12:00', endTime: '13:00', venue: 'Main' },
+      { id: 'a3', filmId: 'a3', date: '2026-10-14', startTime: '14:00', endTime: '15:00', venue: 'Main' },
+      { id: 'b1', filmId: 'b1', date: '2026-10-15', startTime: '10:00', endTime: '11:00', venue: 'Main' },
+      { id: 'b2', filmId: 'b2', date: '2026-10-15', startTime: '12:00', endTime: '13:00', venue: 'Main' },
+      { id: 'r-d2', filmId: 'r', date: '2026-10-15', startTime: '16:00', endTime: '17:00', venue: 'Box' }
+    ]
+
+    const result = generatePlanV3({
+      films: testFilms,
+      screenings: testScreenings,
+      interests: { r: INTEREST_LEVELS.MUST_SEE },
+      constraints: { excludedFilms: [], requiredFilms: [] },
+      attendanceConstraints: {
+        attendanceDays: { '2026-10-14': true, '2026-10-15': true },
+        availabilityByDate: {}
+      },
+      timeBudgetMs: 1000
+    })
+
+    expect(result.infeasible).toBe(false)
+    expect(result.filmCount).toBe(6)
+    expect(result.metadata.maxFilmCountProven).toBe(true)
+    const mustScreenings = result.screenings.filter(s => s.filmId === 'r')
+    expect(mustScreenings).toHaveLength(1)
+    expect(mustScreenings[0].date).toBe('2026-10-15')
+    expect(new Set(result.screenings.map(s => s.filmId)).size).toBe(result.filmCount)
+    expect(validatePlan(result, testFilms, testScreenings).valid).toBe(true)
+  })
+})
+
+describe('validateCountIncumbent', () => {
+  const films = [
+    { id: 'r', title: 'Must', runtime: 60 },
+    { id: 'a', title: 'A', runtime: 60 }
+  ]
+  const screenings = [
+    { id: 'sr', filmId: 'r', date: '2026-10-14', startTime: '10:00', endTime: '11:00', venue: 'Main' },
+    { id: 'sa', filmId: 'a', date: '2026-10-14', startTime: '10:00', endTime: '11:00', venue: 'Box' },
+    { id: 'sa2', filmId: 'a', date: '2026-10-14', startTime: '12:00', endTime: '13:00', venue: 'Box' }
+  ]
+  const data = {
+    requiredFilmIds: ['r'],
+    films,
+    filmMap: new Map(films.map(f => [f.id, f])),
+    screeningMap: new Map(screenings.map(s => [s.id, s])),
+    filmToFeasibleScreenings: new Map([
+      ['r', [screenings[0]]],
+      ['a', [screenings[1], screenings[2]]]
+    ]),
+    attendanceDays: { '2026-10-14': true },
+    availabilityByDate: { '2026-10-14': { from: '09:00', until: '23:00' } }
+  }
+
+  it('rejects a duplicated film', () => {
+    const check = validateCountIncumbent(
+      { screenings: [screenings[0], screenings[0]], filmCount: 1 },
+      data
+    )
+    expect(check.valid).toBe(false)
+    expect(check.errors.join(' ')).toMatch(/more than once|Duplicate/i)
+  })
+
+  it('rejects overlapping screenings', () => {
+    const check = validateCountIncumbent(
+      { screenings: [screenings[0], screenings[1]], filmCount: 2 },
+      data
+    )
+    expect(check.valid).toBe(false)
+    expect(check.errors.join(' ')).toMatch(/Overlap/i)
+  })
+
+  it('rejects a filmCount that does not match distinct films', () => {
+    const check = validateCountIncumbent(
+      { screenings: [screenings[0], screenings[2]], filmCount: 1 },
+      data
+    )
+    expect(check.valid).toBe(false)
+    expect(check.errors.join(' ')).toMatch(/filmCount/)
+  })
+
+  it('rejects a plan that drops a required film', () => {
+    const check = validateCountIncumbent(
+      { screenings: [screenings[2]], filmCount: 1 },
+      data
+    )
+    expect(check.valid).toBe(false)
+    expect(check.errors.join(' ')).toMatch(/Missing required/)
+  })
+
+  it('accepts a feasible non-overlapping plan that includes the Must', () => {
+    const check = validateCountIncumbent(
+      { screenings: [screenings[0], screenings[2]], filmCount: 2 },
+      data
+    )
+    expect(check.valid).toBe(true)
+  })
+})
+

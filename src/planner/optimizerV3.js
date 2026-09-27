@@ -25,6 +25,82 @@ import {
   buildSlotOptions,
   enrichOmissionsWithSlotHints
 } from './slotOptions'
+import { validatePlan } from '../utils/planValidator'
+
+/** @type {number} Preference search cap once the film-count maximum is already proven. */
+const PROVEN_COUNT_PREFERENCE_MS = 1200
+/** @type {number} One-fewer alternative cap once the film-count maximum is already proven. */
+const PROVEN_COUNT_ONE_FEWER_MS = 350
+
+/**
+ * Independent check before Phase A may treat an incumbent as optimal.
+ * Uses planValidator for overlaps, duplicates, and attendance windows, plus
+ * the optimizer's feasible-screening set and required-film coverage.
+ *
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateCountIncumbent(solution, data) {
+  const errors = []
+  if (!solution?.screenings?.length) {
+    return { valid: false, errors: ['Incumbent has no screenings'] }
+  }
+
+  const filmIds = solution.screenings.map(s => s.filmId)
+  const distinct = new Set(filmIds)
+  if (distinct.size !== filmIds.length) {
+    errors.push('A film appears more than once')
+  }
+  if (solution.filmCount !== distinct.size) {
+    errors.push(`filmCount ${solution.filmCount} does not match ${distinct.size} distinct films`)
+  }
+
+  for (const id of data.requiredFilmIds || []) {
+    if (!distinct.has(id)) errors.push(`Missing required film ${id}`)
+  }
+
+  for (const screening of solution.screenings) {
+    const feasible = data.filmToFeasibleScreenings?.get(screening.filmId) || []
+    if (!feasible.some(s => s.id === screening.id)) {
+      errors.push(`Screening ${screening.id} is not attendance-feasible`)
+    }
+  }
+
+  const eligibleDates = Object.entries(data.attendanceDays || {})
+    .filter(([, on]) => on)
+    .map(([date]) => date)
+  const fromTimes = {}
+  const untilTimes = {}
+  for (const [date, window] of Object.entries(data.availabilityByDate || {})) {
+    if (!window) continue
+    if (window.from) fromTimes[date] = window.from
+    if (window.until) untilTimes[date] = window.until
+  }
+
+  const planCheck = validatePlan(
+    { screenings: solution.screenings, filmCount: distinct.size },
+    data.films || [...(data.filmMap?.values() || [])],
+    [...(data.screeningMap?.values() || solution.screenings)],
+    {
+      ...(eligibleDates.length ? { eligibleDates } : {}),
+      ...(Object.keys(fromTimes).length ? { fromTimes } : {}),
+      ...(Object.keys(untilTimes).length ? { untilTimes } : {})
+    }
+  )
+
+  return {
+    valid: errors.length === 0 && planCheck.valid,
+    errors: [...errors, ...planCheck.errors]
+  }
+}
+
+function requiredOnlySolution(requiredSeedScreenings, interests) {
+  if (!requiredSeedScreenings?.length) return null
+  return solutionFromFilms(
+    requiredSeedScreenings,
+    new Set(requiredSeedScreenings.map(s => s.filmId)),
+    interests
+  )
+}
 
 /** Default interactive budget — split across search phases */
 export const DEFAULT_TIME_BUDGET_MS = 20000
@@ -109,14 +185,27 @@ export function generatePlanV3(config) {
   const requiredOnlyCount = requiredSeedScreenings?.length
     ? new Set(requiredSeedScreenings.map(s => s.filmId)).size
     : 0
+  const bareRequired = requiredOnlySolution(requiredSeedScreenings, interests)
   // Extend the feasible Must assignment with compatible day packs so Phase A
   // starts from a high-count incumbent instead of the bare required set.
-  const countIncumbent = buildStrongCountIncumbent(
+  let countIncumbent = buildStrongCountIncumbent(
     requiredSeedScreenings,
     dailySchedules,
     data,
     interests
   )
+  if (countIncumbent) {
+    const incumbentCheck = validateCountIncumbent(countIncumbent, data)
+    if (!incumbentCheck.valid) {
+      console.log(
+        `[OptimizerV3] Strong incumbent rejected: ${incumbentCheck.errors.join('; ')}`
+      )
+      countIncumbent = null
+    }
+  }
+  if (!countIncumbent && bareRequired && validateCountIncumbent(bareRequired, data).valid) {
+    countIncumbent = bareRequired
+  }
 
   console.log(
     `[OptimizerV3] Count incumbent: ${countIncumbent?.filmCount ?? 0} (required-only seed ${requiredOnlyCount})`
@@ -158,10 +247,15 @@ export function generatePlanV3(config) {
     `[OptimizerV3] Phase A: M=${M} maxFilmCountProven=${maxFilmCountProven} ms=${phaseA.elapsedMs.toFixed(0)}`
   )
 
-  // Reallocate leftover time after early Phase A stop (e.g. hit capacity bound)
-  const remainingAfterA = Math.max(100, timeBudgetMs - (performance.now() - startTime))
-  const budgetB = remainingAfterA * 0.55
-  const budgetC = remainingAfterA * 0.45
+  // Once the count maximum is proven, keep a short preference pass and a short
+  // one-fewer pass. Do not spend the rest of the interactive budget there.
+  const remainingAfterA = Math.max(50, timeBudgetMs - (performance.now() - startTime))
+  const budgetB = maxFilmCountProven
+    ? Math.min(PROVEN_COUNT_PREFERENCE_MS, remainingAfterA)
+    : remainingAfterA * 0.55
+  const budgetC = maxFilmCountProven
+    ? Math.min(PROVEN_COUNT_ONE_FEWER_MS, Math.max(0, remainingAfterA - budgetB))
+    : remainingAfterA * 0.45
 
   const schedulesForM = filterSchedulesForExactCount(dailySchedules, data, M)
   const phaseB = runFixedCountPreferencePhase(
@@ -202,14 +296,17 @@ export function generatePlanV3(config) {
   let oneFewerPreferenceProven = false
   let phaseC = { combinationsExplored: 0, elapsedMs: 0 }
   if (M > 0) {
-    const remainingAfterB = Math.max(50, timeBudgetMs - (performance.now() - startTime))
+    const remainingAfterB = Math.max(0, timeBudgetMs - (performance.now() - startTime))
     const schedulesForM1 = filterSchedulesForExactCount(dailySchedules, data, M - 1)
+    const phaseCBudget = maxFilmCountProven
+      ? Math.min(budgetC, remainingAfterB)
+      : Math.max(remainingAfterB, budgetC * 0.5)
     phaseC = runFixedCountPreferencePhase(
       schedulesForM1,
       data,
       interests,
       M - 1,
-      Math.max(remainingAfterB, budgetC * 0.5),
+      phaseCBudget,
       onProgress,
       {
         collectSameSize: false,
@@ -610,7 +707,18 @@ export function buildStrongCountIncumbent(requiredScreenings, dailySchedules, da
       .filter(id => data.requiredFilmSet.has(id))
     const used = usedFilmsExceptDay(dayChoice, date)
     let best = bestDisjointDaySchedule(dailySchedules.get(date) || [], mustInclude, used)
-    if (!best && seeded.length) best = scheduleFromScreenings(seeded)
+    if (!best && seeded.length) {
+      const seededSched = scheduleFromScreenings(seeded)
+      let clashes = false
+      for (const id of seededSched.films) {
+        if (used.has(id)) {
+          clashes = true
+          break
+        }
+      }
+      // Never reinsert a Must film that an earlier day pack already took.
+      if (!clashes) best = seededSched
+    }
     if (best) dayChoice.set(date, best)
   }
 
@@ -942,8 +1050,28 @@ function runFixedCountPreferencePhase(
     suffixMax[i] = suffixMax[i + 1] + (data.maxPerDay.get(days[i]) || 0)
   }
 
-  // Prefer preference-rich day schedules (already annotated/sorted)
-  const orderedByDay = days.map(date => (dailySchedules.get(date) || []).slice())
+  // Put the incumbent's day pack first so a short search reaches complete plans
+  // and same-size swaps immediately, instead of wandering before the first leaf.
+  const incumbentFilmsByDay = new Map()
+  if (seedSolution?.screenings) {
+    for (const screening of seedSolution.screenings) {
+      if (!incumbentFilmsByDay.has(screening.date)) {
+        incumbentFilmsByDay.set(screening.date, new Set())
+      }
+      incumbentFilmsByDay.get(screening.date).add(screening.filmId)
+    }
+  }
+  const orderedByDay = days.map(date => {
+    const schedules = (dailySchedules.get(date) || []).slice()
+    const films = incumbentFilmsByDay.get(date)
+    if (!films) return schedules
+    schedules.sort((a, b) => {
+      const aMatch = sameFilmSet(a.films, films) ? 0 : 1
+      const bMatch = sameFilmSet(b.films, films) ? 0 : 1
+      return aMatch - bMatch
+    })
+    return schedules
+  })
 
   let bestTuple = null
   let bestSolution = null
@@ -1253,6 +1381,14 @@ function enrichResult(raw, data, interests, constraints, totalMs) {
       status
     }
   }
+}
+
+function sameFilmSet(a, b) {
+  if (!a || !b || a.size !== b.size) return false
+  for (const id of a) {
+    if (!b.has(id)) return false
+  }
+  return true
 }
 
 function dayScheduleConflictsWithGlobal(daySchedule, globalScreenings, globalFilms, filmMap) {
